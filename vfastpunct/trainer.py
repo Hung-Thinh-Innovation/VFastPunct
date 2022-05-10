@@ -57,7 +57,6 @@ def train_one_epoch(model, optimizer, train_iterator, max_grad_norm: float = 1.0
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        break
     epoch_loss = tr_loss / nb_tr_steps
     LOGGER.info(f"\tTraining Loss: {epoch_loss}; "
                 f"Spend time: {time.time() - start_time}")
@@ -116,8 +115,8 @@ def train():
                                   device=device)
 
     train_sampler = RandomSampler(train_dataset)
-    train_iterator = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size)
-    valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=False)
+    train_iterator = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size, num_workers=0)
+    valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=False, num_workers=0)
 
     config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=len(PUNC_LABEL2ID),
                                         finetuning_task="vipunc")
@@ -126,8 +125,10 @@ def train():
     model.to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, eps=args.adam_epsilon)
-
+    cumulative_early_steps = 0
     for epoch in range(int(args.epochs)):
+        if cumulative_early_steps > args.early_stop:
+            LOGGER.info(f"Hey!!! Early stopping. Check your saved model.")
         LOGGER.info(f"Training epoch {epoch}")
         train_one_epoch(model, optimizer, train_iterator, max_grad_norm=args.max_grad_norm)
         _, _, eval_f1_score = validate(model, valid_iterator)
@@ -142,6 +143,9 @@ def train():
                 'args': args
             }
             torch.save(saved_data, saved_file)
+            cumulative_early_steps = 0
+        else:
+            cumulative_early_steps += 1
 
 
 if __name__ == "__main__":

@@ -44,7 +44,7 @@ def get_train_argument():
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate", default=5e-5, type=float,
                         help="The initial learning rate for Adam.")
-    parser.add_argument("--epochs", default=3.0, type=float,
+    parser.add_argument("--epochs", default=100.0, type=float,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training to perform linear learning rate warmup for. "
@@ -54,6 +54,8 @@ def get_train_argument():
     parser.add_argument("--adam_epsilon", default=1e-8, type=float,
                         help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
+                        help="Max gradient norm.")
+    parser.add_argument("--early_stop", default=10.0, type=float,
                         help="Max gradient norm.")
     parser.add_argument("--no_cuda", action='store_true',
                         help="Whether not to use CUDA when available")
