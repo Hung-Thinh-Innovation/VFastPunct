@@ -12,6 +12,7 @@ import os
 import sys
 import time
 import torch
+import itertools
 
 
 def validate(model, valid_iterator, is_test=False):
@@ -26,8 +27,8 @@ def validate(model, valid_iterator, is_test=False):
             nb_eval_steps += 1
             active_accuracy = batch['label_masks'].view(-1) != 0
             labels = torch.masked_select(batch['labels'].view(-1), active_accuracy)
-            predictions = torch.tensor(eval_logits, device=labels.device).view(-1)
-            eval_labels.extend(labels)
+            predictions = list(itertools.chain(*eval_logits))
+            eval_labels.extend(labels.cpu().tolist())
             eval_preds.extend(predictions)
     epoch_loss = eval_loss / nb_eval_steps
     if is_test:
@@ -74,11 +75,11 @@ def test():
     tokenizer = AutoTokenizer.from_pretrained(configs.model_name_or_path)
 
     test_dataset = build_dataset(args.data_dir,
-                                  tokenizer=tokenizer,
-                                  data_type='test',
-                                  max_seq_length=configs.max_seq_length,
-                                  overwrite_data=args.overwrite_data,
-                                  device=device)
+                                 tokenizer=tokenizer,
+                                 data_type='test',
+                                 max_seq_length=configs.max_seq_length,
+                                 overwrite_data=args.overwrite_data,
+                                 device=device)
 
     test_iterator = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
 
@@ -127,7 +128,7 @@ def train():
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, eps=args.adam_epsilon)
 
     for epoch in range(int(args.epochs)):
-        LOGGER.info(f"Training epoch - {epoch}")
+        LOGGER.info(f"Training epoch {epoch}")
         train_one_epoch(model, optimizer, train_iterator, max_grad_norm=args.max_grad_norm)
         _, _, eval_f1_score = validate(model, valid_iterator)
         LOGGER.info(f"\tEpoch F1 score = {eval_f1_score} ; Best score = {best_score}")
