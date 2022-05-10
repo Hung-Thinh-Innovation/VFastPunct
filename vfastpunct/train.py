@@ -1,9 +1,9 @@
 from tqdm import tqdm
 from pathlib import Path
-from .arguments import get_train_argument
-from .configs import PUNC_LABEL2ID
-from .processor import build_dataset
-from .models import PuncBertLstmCrf
+from vfastpunct.arguments import get_train_argument
+from vfastpunct.configs import PUNC_LABEL2ID
+from vfastpunct.processor import build_dataset
+from vfastpunct.models import PuncBertLstmCrf
 from sklearn.metrics import classification_report
 from transformers import AutoConfig, AutoTokenizer, AdamW
 from torch.utils.data import DataLoader, RandomSampler
@@ -20,9 +20,9 @@ def validate(model, valid_iterator):
             loss, eval_logits = model(**batch)
             eval_loss += loss.item()
             nb_eval_steps += 1
-            active_accuracy = labels.view(-1) != 0
+            active_accuracy = batch['label_masks'].view(-1) != 0
             labels = torch.masked_select(labels.view(-1), active_accuracy)
-            predictions = torch.masked_select(torch.tensor(eval_logits, device=labels.device).view(-1), active_accuracy)
+            predictions = torch.tensor(eval_logits, device=labels.device).view(-1)
             eval_labels.extend(labels)
             eval_preds.extend(predictions)
     epoch_loss = eval_loss / nb_eval_steps

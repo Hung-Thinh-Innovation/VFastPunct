@@ -4,7 +4,7 @@ from argparse import ArgumentParser
 def get_train_argument():
     parser = ArgumentParser()
     # Required parameters
-    parser.add_argument("--data_dir", default='dataset/', type=str,
+    parser.add_argument("--data_dir", default='datasets/News', type=str,
                         help="The input data dir. Should contain the .csv files (or other data files) for the task.")
     parser.add_argument("--overwrite_data", action='store_true',
                         help="Whether not to overwirte splitted dataset")

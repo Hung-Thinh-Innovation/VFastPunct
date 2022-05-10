@@ -47,6 +47,7 @@ class PuncDataset(Dataset):
     def __getitem__(self, index):
         sentence = self.examples.example[index]
         labels = [PUNC_LABEL2ID.index(l) for l in self.examples.labels[index].split()]
+        label_masks = [1] * len(labels)
         encoding = self.tokenizer(normalize_text(sentence),
                                   padding='max_length',
                                   truncation=True,
@@ -59,11 +60,15 @@ class PuncDataset(Dataset):
                 continue
             valid_id[idx] = 1
             i += 1
-        labels.extend([0] * (self.max_len - len(labels)))
+        label_padding_size = (self.max_len - len(labels))
+        labels.extend([0] * label_padding_size)
+        label_masks.extend([0] * label_padding_size)
+
         encoding.pop('offset_mapping', None)
         item = {key: torch.as_tensor(val).to(self.device, dtype=torch.long) for key, val in encoding.items()}
         item['labels'] = torch.as_tensor(labels).to(self.device, dtype=torch.long)
         item['valid_ids'] = torch.as_tensor(valid_id).to(self.device, dtype=torch.long)
+        item['label_masks'] = torch.as_tensor(label_masks).to(self.device, dtype=torch.long)
         return item
 
     def __len__(self):
@@ -76,12 +81,12 @@ def build_dataset(data_dir,
                   max_seq_length: int = 128,
                   overwrite_data: bool = False,
                   device: str = 'cpu'):
-    if not os.path.exists(Path(data_dir + f'{data_type}_spliited.txt')) or overwrite_data:
-        data_df = pd.read_csv(Path(data_dir + f'{data_type}.txt'), encoding='utf-8', sep=' ', names=['token', 'label'],
+    if not os.path.exists(Path(data_dir + f'/{data_type}_splitted.txt')) or overwrite_data:
+        data_df = pd.read_csv(Path(data_dir + f'/{data_type}.txt'), encoding='utf-8', sep=' ', names=['token', 'label'],
                                keep_default_na=False)
         data_df = split_example(data_df, EOS_MARKS, max_len=max_seq_length)
-        data_df.to_csv(Path(data_dir + f'{data_type}_splitted.txt'))
+        data_df.to_csv(Path(data_dir + f'/{data_type}_splitted.txt'))
     else:
-        data_df = pd.read_csv(Path(data_dir + f'{data_type}_spliited.txt'))
+        data_df = pd.read_csv(Path(data_dir + f'/{data_type}_splitted.txt'))
     punc_dataset = PuncDataset(data_df, tokenizer, max_len=max_seq_length, device=device)
     return punc_dataset
