@@ -1,7 +1,7 @@
 from typing import List
 from pathlib import Path
 from torch.utils.data import Dataset
-from .constants import PUNC_LABEL2ID, EOS_MARKS
+from .constants import LOGGER, PUNC_LABEL2ID, EOS_MARKS
 
 import re
 import os
@@ -81,12 +81,17 @@ def build_dataset(data_dir,
                   max_seq_length: int = 128,
                   overwrite_data: bool = False,
                   device: str = 'cpu'):
-    if not os.path.exists(Path(data_dir + f'/{data_type}_splitted.txt')) or overwrite_data:
-        data_df = pd.read_csv(Path(data_dir + f'/{data_type}.txt'), encoding='utf-8', sep=' ', names=['token', 'label'],
+    data_file = Path(data_dir + f'/{data_type}.txt')
+    data_splitted_file = Path(data_dir + f'/{data_type}_splitted.txt')
+    assert os.path.exists(data_file) or os.path.exists(data_splitted_file), \
+        f'`{data_file}` not exists! Do you realy have a dataset?'
+    if not os.path.exists(data_splitted_file) or overwrite_data:
+        LOGGER.info("Slipt dataset to example. It will take a few minutes, calm down and wait!")
+        data_df = pd.read_csv(data_file, encoding='utf-8', sep=' ', names=['token', 'label'],
                                keep_default_na=False)
         data_df = split_example(data_df, EOS_MARKS, max_len=max_seq_length)
-        data_df.to_csv(Path(data_dir + f'/{data_type}_splitted.txt'))
+        data_df.to_csv(data_splitted_file)
     else:
-        data_df = pd.read_csv(Path(data_dir + f'/{data_type}_splitted.txt'))
+        data_df = pd.read_csv(data_splitted_file)
     punc_dataset = PuncDataset(data_df, tokenizer, max_len=max_seq_length, device=device)
     return punc_dataset

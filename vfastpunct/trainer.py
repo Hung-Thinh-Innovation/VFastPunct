@@ -1,6 +1,6 @@
 from tqdm import tqdm
 from pathlib import Path
-from vfastpunct.arguments import get_train_argument
+from vfastpunct.arguments import get_train_argument, get_test_argument
 from vfastpunct.constants import LOGGER, PUNC_LABEL2ID
 from vfastpunct.processor import build_dataset
 from vfastpunct.models import PuncBertLstmCrf
@@ -14,7 +14,7 @@ import time
 import torch
 
 
-def validate(model, valid_iterator):
+def validate(model, valid_iterator, is_test=False):
     start_time = time.time()
     model.eval()
     eval_loss, nb_eval_steps = 0.0, 0.0
@@ -30,12 +30,18 @@ def validate(model, valid_iterator):
             eval_labels.extend(labels)
             eval_preds.extend(predictions)
     epoch_loss = eval_loss / nb_eval_steps
-    reports = classification_report(eval_labels, eval_preds, output_dict=True, zero_division=0)
-    LOGGER.info(f"\tValidation Loss: {eval_loss}; "
-                f"Accuracy: {reports['accuracy']}; "
-                f"Macro-F1 score: {reports['macro avg']['f1-score']}; "
-                f"Spend time: {time.time() - start_time}")
-    return epoch_loss, reports['macro avg'], reports['macro avg']['f1-score']
+    if is_test:
+        reports = classification_report(eval_labels, eval_preds, zero_division=0)
+        LOGGER.info(f'\tTest Loss: {eval_loss}; Spend time: {time.time() - start_time}')
+        LOGGER.info(reports)
+        return epoch_loss
+    else:
+        reports = classification_report(eval_labels, eval_preds, output_dict=True, zero_division=0)
+        LOGGER.info(f"\tValidation Loss: {eval_loss}; "
+                    f"Accuracy: {reports['accuracy']}; "
+                    f"Macro-F1 score: {reports['macro avg']['f1-score']}; "
+                    f"Spend time: {time.time() - start_time}")
+        return epoch_loss, reports['macro avg'], reports['macro avg']['f1-score']
 
 
 def train_one_epoch(model, optimizer, train_iterator, max_grad_norm: float = 1.0):
@@ -50,6 +56,7 @@ def train_one_epoch(model, optimizer, train_iterator, max_grad_norm: float = 1.0
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+        break
     epoch_loss = tr_loss / nb_tr_steps
     LOGGER.info(f"\tTraining Loss: {epoch_loss}; "
                 f"Spend time: {time.time() - start_time}")
@@ -57,7 +64,30 @@ def train_one_epoch(model, optimizer, train_iterator, max_grad_norm: float = 1.0
 
 
 def test():
-    return NotImplementedError
+    args = get_test_argument()
+    device = 'cuda' if not args.no_cuda and torch.cuda.is_available() else 'cpu'
+
+    assert os.path.exists(args.model_path), f'`{args.model_path}` not exists! What do you do with the checkpoint file?'
+    checkpoint_data = torch.load(args.model_path)
+    configs = checkpoint_data['args']
+
+    tokenizer = AutoTokenizer.from_pretrained(configs.model_name_or_path)
+
+    test_dataset = build_dataset(args.data_dir,
+                                  tokenizer=tokenizer,
+                                  data_type='test',
+                                  max_seq_length=configs.max_seq_length,
+                                  overwrite_data=args.overwrite_data,
+                                  device=device)
+
+    test_iterator = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+
+    config = AutoConfig.from_pretrained(configs.model_name_or_path, num_labels=len(checkpoint_data['classes']),
+                                        finetuning_task="vipunc")
+    model = PuncBertLstmCrf.from_pretrained(configs.model_name_or_path, config=config, from_tf=False)
+    model.load_state_dict(checkpoint_data['model'])
+    model.to(device)
+    validate(model, test_iterator, is_test=True)
 
 
 def train():
@@ -104,7 +134,7 @@ def train():
         if eval_f1_score > best_score:
             best_score = eval_f1_score
             saved_file = Path(args.output_dir + f"/best_model.pt")
-            LOGGER.info(f"\t***Saving best model to {saved_file}***")
+            LOGGER.info(f"\t***Oh yeah!!! New best model, saving to {saved_file}...***")
             saved_data = {
                 'model': model.state_dict(),
                 'classes': PUNC_LABEL2ID,
@@ -115,10 +145,10 @@ def train():
 
 if __name__ == "__main__":
     if sys.argv[1] == 'train':
-        LOGGER.info("Start TRAIN process...")
+        LOGGER.info("Start TRAIN process... go go go!!!")
         train()
     elif sys.argv[1] == 'test':
-        LOGGER.info("Start TEST process...")
+        LOGGER.info("Start TEST process... go go go!!!")
         test()
     else:
-        LOGGER.error('What do you want?')
+        LOGGER.error(f'[ERROR] - `{sys.argv[1]}` Are you kidding me? I only know `train` or `test`. Please read the README!!!!')
