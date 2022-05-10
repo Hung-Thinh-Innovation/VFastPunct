@@ -1,7 +1,7 @@
 from typing import List
 from pathlib import Path
 from torch.utils.data import Dataset
-from .configs import PUNC_LABEL2ID, EOS_MARKS
+from .constants import PUNC_LABEL2ID, EOS_MARKS
 
 import re
 import os

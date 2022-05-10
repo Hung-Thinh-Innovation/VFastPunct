@@ -1,9 +1,21 @@
 from argparse import ArgumentParser
 
+def get_test_argument():
+    parser = ArgumentParser()
+    parser.add_argument('type', choices=['train', 'test'],
+                        help='What processs to be run')
+    parser.add_argument("--data_dir", default='datasets/News', type=str,
+                        help="The input data dir. Should contain the .txt files (or other data files) for the task.")
+    parser.add_argument("--overwrite_data", action='store_true',
+                        help="Whether not to overwirte splitted dataset")
+    parser.add_argument("--model_name_or_path", default='bert-base-multilingual-cased', type=str,
+                        help="Pre-trained model selected in the list: bert-base-uncased, bert-base-cased...")
+
 
 def get_train_argument():
     parser = ArgumentParser()
-    # Required parameters
+    parser.add_argument('type', choices=['train', 'test'],
+                        help='What processs to be run')
     parser.add_argument("--data_dir", default='datasets/News', type=str,
                         help="The input data dir. Should contain the .csv files (or other data files) for the task.")
     parser.add_argument("--overwrite_data", action='store_true',
