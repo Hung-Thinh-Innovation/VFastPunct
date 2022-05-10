@@ -1,8 +1,10 @@
-from transformers import BertForTokenClassification
+from transformers import logging, BertForTokenClassification
 from torchcrf import CRF
 
 import torch
 import torch.nn as nn
+
+logging.set_verbosity_error()
 
 
 class PuncBertLstmCrf(BertForTokenClassification):
@@ -16,34 +18,20 @@ class PuncBertLstmCrf(BertForTokenClassification):
                             bidirectional=True)
         self.crf = CRF(config.num_labels, batch_first=True)
 
-    def next_forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, valid_ids=None,
-                     device='cuda'):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, valid_ids=None):
         seq_output = self.bert(input_ids, token_type_ids, attention_mask, head_mask=None)[0]
         seq_output, _ = self.lstm(seq_output)
-        batch_size, max_len, feat_dim = seq_output.shape
         sequence_output = self.dropout(seq_output)
         logits = self.classifier(sequence_output)
-
-        if labels is not None:
-            log_likelihood = self.crf(logits, labels, mask=valid_ids.type(torch.uint8))
-            return -1.0 * log_likelihood
-        else:
-            seq_tags = self.crf.decode(logits)
-            return seq_tags
-
-    def forward(self, token_ids, token_type_ids=None, attention_mask=None, labels=None, valid_ids=None):
-        seq_output = self.bert(token_ids, token_type_ids, attention_mask, head_mask=None)[0]
-        seq_output, _ = self.lstm(seq_output)
-        sequence_output = self.dropout(seq_output)
-        logits = self.classifier(sequence_output)
+        seq_tags = self.crf.decode(logits)
         if labels is not None:
             log_likelihood = self.crf(logits, labels, mask=valid_ids != 0)
-            return -1.0 * log_likelihood
+            return -1.0 * log_likelihood, seq_tags
         else:
-            seq_tags = self.crf.decode(logits)
             return seq_tags
 
 
+# DEBUG
 if __name__ == "__main__":
     from transformers import BertConfig
     model_name = 'bert-base-multilingual-cased'
