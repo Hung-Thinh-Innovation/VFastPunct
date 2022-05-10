@@ -19,12 +19,12 @@ class PuncBertLstmCrf(BertForTokenClassification):
         self.crf = CRF(config.num_labels, batch_first=True)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, valid_ids=None,
-                label_masks=None, device='cpu'):
+                label_masks=None):
         seq_output = self.bert(input_ids, token_type_ids, attention_mask, head_mask=None)[0]
         seq_output, _ = self.lstm(seq_output)
 
         batch_size, max_len, feat_dim = seq_output.shape
-        valid_output = torch.zeros(batch_size, max_len, feat_dim, dtype=torch.float32, device=device)
+        valid_output = torch.zeros(batch_size, max_len, feat_dim, dtype=torch.float32, device=seq_output.device)
         for i in range(batch_size):
             jj = -1
             for j in range(max_len):
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     output = model.forward(input_ids,
                    labels=new_labels,
                    attention_mask=mask,
-                   valid_ids=valid_ids, attention_mask_label=label_mask)
+                   valid_ids=valid_ids, label_masks=label_mask)
     print(labels)
     print(new_labels)
     print(label_mask)
