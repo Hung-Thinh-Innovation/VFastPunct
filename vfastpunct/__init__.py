@@ -1,0 +1,1 @@
+from vfastpunct.vfastpunct import VFastPunct

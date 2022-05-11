@@ -40,7 +40,7 @@ def validate(model, valid_iterator, is_test=False):
         reports = classification_report(eval_labels, eval_preds, output_dict=True, zero_division=0)
         LOGGER.info(f"\tValidation Loss: {eval_loss}; "
                     f"Accuracy: {reports['accuracy']}; "
-                    f"Macro-F1 score: {reports['macro avg']['f1-score']}; "
+                    f"Macro-F1 score: {reports['macro avg']['f1-score']};"
                     f"Spend time: {time.time() - start_time}")
         return epoch_loss, reports['macro avg'], reports['macro avg']['f1-score']
 
