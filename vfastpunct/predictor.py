@@ -13,7 +13,7 @@ import numpy as np
 
 class VFastPunct(object):
     def __init__(self, model_name, no_cuda=False):
-        self.device = device = 'cuda' if not no_cuda and torch.cuda.is_available() else 'cpu'
+        self.device = 'cuda' if not no_cuda and torch.cuda.is_available() else 'cpu'
         model_clss,  lm_name, model_path, drive_id = MODEL_MAPPING[model_name]
         if not os.path.exists(model_path):
             download_file_from_google_drive(drive_id, model_path, confirm='t')
