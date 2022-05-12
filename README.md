@@ -1,4 +1,7 @@
-# vfastPunct
+<h1 align="center">🕳️vfastPunct</h1>
+
+Code by **Trong-Dat Ngo**.
+
 Fast Punctuation Restoration using Transformer Models for Vietnamese
 
 ## Installation
