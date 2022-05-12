@@ -7,7 +7,7 @@ requires = (HERE / 'requirements.txt').read_text().split('\n')
 
 setup(
     name="VFastPunct",
-    version="1.0",
+    version="1.0.1",
     description="Fast Punctuation Restoration for Vietnamese",
     long_description=README,
     long_description_content_type="text/markdown",
