@@ -9,7 +9,7 @@ elif [ $1 == "build" ]; then
     twine check dist/*
     echo "This project was built!!!"
 elif [ $1 == "release" ]; then
-    bash project.sh clean
+    bash build.sh clean
     python3 setup.py sdist bdist_wheel
     twine check dist/*
     twine upload dist/*
