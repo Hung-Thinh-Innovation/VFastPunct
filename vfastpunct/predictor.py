@@ -38,7 +38,7 @@ class VFastPunct(object):
     def preprocess(self, in_raw: str):
         norm_text = normalize_text(in_raw)
         sents = []
-        tokens = in_raw.split()
+        tokens = norm_text.split()
         idx = 0
         num_token = len(tokens)
         while num_token > idx >= 0:
@@ -76,10 +76,10 @@ class VFastPunct(object):
                 tag = self.model(**item)
             for w, l in list(zip(sent.split(), list(itertools.chain(*tag)))):
                 p = PUNC_MAPPING[self.id2puc[l]]
-                if p == ".":
-                    result += f"{w.title()}{p} "
+                if len(result) > 0 and result[-1] == ".":
+                    result += f" {w.title()}{p}"
                 else:
-                    result += f"{w}{p} "
+                    result += f" {w}{p}"
         return result.strip()
 
 
@@ -87,8 +87,12 @@ if __name__ == "__main__":
     from string import punctuation
     import re
     punct = VFastPunct("mBertLstmCrf", True)
-    in_raw = 'Ngày 12-5, thông tin từ Công an tỉnh Long An cho biết trong ngày, Cơ quan an ninh điều tra Công an tỉnh ' \
-              'này đã tống đạt quyết định khởi tố bị can, bắt tạm giam bà Cao Thị Cúc (62 tuổi, ngụ xã Hòa Khánh Tây, ' \
-              'huyện Đức Hòa), là chủ căn nhà nơi tự xưng là "tịnh thất Bồng Lai".'.lower()
+    in_raw = 'Tại hội thảo, Trưởng Ban Tuyên giáo Trung ương Nguyễn Trọng Nghĩa nhấn mạnh trẻ em là nguồn hạnh phúc của ' \
+             'gia đình, tương lai của dân tộc, lớp người kế tục sự nghiệp xây dựng và bảo vệ Tổ quốc. Do đó, tất cả trẻ ' \
+             'em dưới 6 tuổi được cấp thẻ bảo hiểm y tế miễn phí; trẻ em dưới 1 tuổi được tham gia tiêm chủng mở rộng và ' \
+             'trẻ em 5 tuổi được đi học mẫu giáo; học sinh tiểu học không phải trả phí đi học… Tuy vậy, ông Nghĩa chỉ rõ ' \
+             'vấn đề mất cân bằng giới tính khi sinh, tình trạng tảo hôn, bạo lực gia đình còn gây nhiều hậu quả nghiêm ' \
+             'trọng cho trẻ em. Tỉ lệ trẻ em dưới 5 tuổi suy dinh dưỡng thể thấp còi vẫn ở mức cao. Trẻ bị xâm hại, đặc ' \
+             'biệt là xâm hại tình dục và bạo hành vẫn diễn biến phức tạp ở nhiều địa bàn, gây bức xúc trong xã hội.'.lower()
     in_text = re.sub(f" +", " ", re.sub(f"[{punctuation}]", " ", in_raw))
     print(punct(in_text))
