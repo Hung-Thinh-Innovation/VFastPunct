@@ -68,9 +68,12 @@ def test():
     device = 'cuda' if not args.no_cuda and torch.cuda.is_available() else 'cpu'
 
     assert os.path.exists(args.model_path), f'`{args.model_path}` not exists! What do you do with the checkpoint file?'
-    checkpoint_data = torch.load(args.model_path)
-    configs = checkpoint_data['args']
+    if device == 'cpu':
+        checkpoint_data = torch.load(args.model_path, map_location='cpu')
+    else:
+        checkpoint_data = torch.load(args.model_path)
 
+    configs = checkpoint_data['args']
     tokenizer = AutoTokenizer.from_pretrained(configs.model_name_or_path)
 
     test_dataset = build_dataset(args.data_dir,
@@ -86,6 +89,32 @@ def test():
                                         finetuning_task="vipunc")
     model = PuncBertLstmCrf.from_pretrained(configs.model_name_or_path, config=config, from_tf=False)
     model.load_state_dict(checkpoint_data['model'])
+    model.to(device)
+    validate(model, test_iterator, is_test=True)
+
+
+def test2():
+    args = get_test_argument()
+    device = 'cuda' if not args.no_cuda and torch.cuda.is_available() else 'cpu'
+    assert os.path.exists(args.model_path), f'`{args.model_path}` not exists! What do you do with the checkpoint file?'
+    if device == 'cpu':
+        checkpoint_data = torch.load(args.model_path, map_location='cpu')
+    else:
+        checkpoint_data = torch.load(args.model_path)
+    tokenizer = AutoTokenizer.from_pretrained('bert-base-multilingual-cased')
+    test_dataset = build_dataset(args.data_dir,
+                                 tokenizer=tokenizer,
+                                 data_type='test',
+                                 max_seq_length=190,
+                                 overwrite_data=args.overwrite_data,
+                                 device=device)
+
+    test_iterator = DataLoader(test_dataset, batch_size=1, shuffle=False)
+
+    config = AutoConfig.from_pretrained('bert-base-multilingual-cased', num_labels=len(PUNC_LABEL2ID)+1,
+                                        finetuning_task="vipunc")
+    model = PuncBertLstmCrf(config=config)
+    model.load_state_dict(checkpoint_data['model_state_dict'])
     model.to(device)
     validate(model, test_iterator, is_test=True)
 
@@ -154,6 +183,6 @@ if __name__ == "__main__":
         train()
     elif sys.argv[1] == 'test':
         LOGGER.info("Start TEST process... go go go!!!")
-        test()
+        test2()
     else:
         LOGGER.error(f'[ERROR] - `{sys.argv[1]}` Are you kidding me? I only know `train` or `test`. Please read the README!!!!')
