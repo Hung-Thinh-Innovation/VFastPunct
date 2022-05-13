@@ -101,7 +101,9 @@ def test2():
         checkpoint_data = torch.load(args.model_path, map_location='cpu')
     else:
         checkpoint_data = torch.load(args.model_path)
+    special_tokens = ['<NUM>', '<URL>', '<EMAIL>']
     tokenizer = AutoTokenizer.from_pretrained('bert-base-multilingual-cased')
+    tokenizer.add_tokens(special_tokens)
     test_dataset = build_dataset(args.data_dir,
                                  tokenizer=tokenizer,
                                  data_type='test',
@@ -114,6 +116,7 @@ def test2():
     config = AutoConfig.from_pretrained('bert-base-multilingual-cased', num_labels=len(PUNC_LABEL2ID)+1,
                                         finetuning_task="vipunc")
     model = PuncBertLstmCrf(config=config)
+    model.resize_token_embeddings(len(tokenizer))
     model.load_state_dict(checkpoint_data['model_state_dict'])
     model.to(device)
     validate(model, test_iterator, is_test=True)
