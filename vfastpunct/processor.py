@@ -1,7 +1,8 @@
 from typing import List
 from pathlib import Path
 from torch.utils.data import Dataset
-from .constants import LOGGER, PUNC_LABEL2ID, EOS_MARKS
+from string import punctuation
+from vfastpunct.constants import LOGGER, PUNC_LABEL2ID, EOS_MARKS, STRPUNC_MAPPING
 
 import re
 import os
@@ -31,6 +32,22 @@ def split_example(dataframe: pd.DataFrame, eos_marks: List[str], max_len: int = 
         examples.append([" ".join(example_df.token.values.tolist()), " ".join(example_df.label.values.tolist())])
         idx = end_idx
     return pd.DataFrame(examples, columns=["example", "labels"])
+
+def make_dataset(data_file):
+    punct_pattern = re.compile(f'[{punctuation}]+')
+    examples = []
+    with open(data_file, 'r', encoding='utf-8') as f:
+        for line in f.readlines():
+            line = normalize_text(line)
+            matches = punct_pattern.finditer(line)
+            end_idx = 0
+            for m in matches:
+                tokens = line[end_idx: m.start()].split()
+                examples.extend([(t, 'O') for t in tokens[:-1]])
+                punc = line[m.start(): m.end()]
+                if punc in STRPUNC_MAPPING:
+                    examples.append((tokens[-1], STRPUNC_MAPPING[punc]))
+                end_idx += m.end()
 
 
 class PuncDataset(Dataset):
@@ -95,3 +112,8 @@ def build_dataset(data_dir,
         data_df = pd.read_csv(data_splitted_file)
     punc_dataset = PuncDataset(data_df, tokenizer, max_len=max_seq_length, device=device)
     return punc_dataset
+
+#DEBUG
+if __name__ == "__main__":
+    raw_data_path = './datasets/Raw/sample.txt'
+    make_dataset(raw_data_path)
