@@ -1,16 +1,14 @@
 from typing import List, Union
 from pathlib import Path
-from torch.utils.data import Dataset
 from string import punctuation
-from sklearn.model_selection import train_test_split
-from vfastpunct.constants import LOGGER, PUNC_LABEL2ID, EOS_MARKS, STRPUNC_MAPPING, PUNC_MAPPING, CAP_MAPPING
+from vfastpunct.constants import STRPUNC_MAPPING, PUNC_MAPPING, CAP_MAPPING
+from tqdm import tqdm
 
 import re
-import random
+import bisect
 import os
-import torch
+import subprocess
 import pandas as pd
-import numpy as np
 
 
 def normalize_text(txt):
@@ -35,6 +33,26 @@ def split_example(dataframe: pd.DataFrame, eos_marks: List[str], max_len: int = 
         idx = end_idx
     return pd.DataFrame(examples, columns=["example", "labels"])
 
+
+def get_total_lines(fpath: Union[str, os.PathLike]):
+    return int(subprocess.check_output(["wc", "-l", fpath]).split()[0])
+
+
+def train_test_split(fpath: Union[str, os.PathLike], total_lines: int, test_ratio=0.2):
+    out_path = str(Path(fpath).parent) + '/raw_'
+    cmd = f'shuf {fpath} | split -a1 -d  -l $({int(total_lines * (1 - test_ratio))}) - {out_path}'
+    subprocess.run(cmd)
+    return Path(out_path+'0'), Path(out_path+'1')
+
+
+def binary_search(a, x):
+    i = bisect.bisect_left(a, x)
+    if i != len(a) and a[i] == x:
+        return i
+    else:
+        return -1
+
+
 def get_cap_label(token: str) -> str:
     if token.isupper():
         return 'UPPER'
@@ -43,121 +61,68 @@ def get_cap_label(token: str) -> str:
     else:
         return 'KEEP'
 
+
 def restoration_punct(examples: List):
     result = ''
     for t in examples:
         result += f'{CAP_MAPPING[t[-1]](t[0])}{PUNC_MAPPING[t[1]]} '
+    result = re.sub(f'(\d) *([{punctuation}]) *(\d)', r'\1\2\3', result)
     return result.strip()
 
-def make_dataset(data_file: Union[str, os.PathLike], split_test=False, debug: bool = False):
+
+def make_dataset(data_file: Union[str, os.PathLike], split_test=False, test_ratio: float = 0.2, debug: bool = False):
     punct_pattern = re.compile(f'[{punctuation}]+')
-    examples = []
     raw_path = Path(data_file)
-    with open(raw_path, 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-        random.shuffle(lines)
-        for line in lines:
-            cur_example = []
-            line = normalize_text(line)
-            matches = punct_pattern.finditer(line)
-            end_idx = 0
-            for m in matches:
-                tokens = line[end_idx: m.start()].split()
-                if len(tokens) == 0:
-                    end_idx = m.end()
-                    continue
-                for t in tokens[:-1]:
-                    cur_example.extend([(t.lower(), 'O', get_cap_label(t))])
-                puncs = line[m.start(): m.end()]
-                punc_label = 'O'
-                if puncs in STRPUNC_MAPPING:
-                    punc_label = STRPUNC_MAPPING[puncs]
-                else:
-                    for punc in list(puncs):
-                        if punc in STRPUNC_MAPPING:
-                            punc_label = STRPUNC_MAPPING[punc]
-                            break
-                cur_example.append((tokens[-1].lower(), punc_label, get_cap_label(tokens[-1])))
-                end_idx = m.end()
-            examples.extend(cur_example)
-            if not restoration_punct(cur_example) == line and debug:
-                print(line)
-                print(restoration_punct(cur_example))
-                print('\n')
-    df = pd.DataFrame(examples)
+    debug_count = 0
+    total_lines = get_total_lines(raw_path)
+    dataset_mapping = {'train.txt': (raw_path, total_lines), 'test.txt': None}
+
     if split_test:
-        train_df, test_df = train_test_split(df, shuffle=False, test_size=0.2)
-        train_df.to_csv(Path(str(raw_path.parent)+'/train.txt'), sep=' ', index=False, header=False)
-        test_df.to_csv(Path(str(raw_path.parent)+'/test.txt'), sep=' ', index=False, header=False)
-    else:
-        df.to_csv(Path(str(raw_path.parent)+'/train.txt'), sep=' ', index=False, header=False)
+        raw_train_path, raw_test_path = train_test_split(raw_path, total_lines=total_lines, test_ratio=test_ratio)
+        num_train = int(total_lines * (1 - test_ratio))
+        dataset_mapping = {
+            'train.txt': (raw_train_path, num_train),
+            'test.txt': (raw_test_path, total_lines - num_train)
+        }
+    for dtype, (dpath, num_line) in dataset_mapping.items():
+        if dpath is None:
+            continue
+        dwriter = open(Path(str(raw_path.parent) + f'/{dtype}'), 'w')
+        with open(dpath, 'r', encoding='utf-8') as f:
+            for idx, line in enumerate(tqdm(f, total=num_line)):
+                cur_examples = []
+                line = normalize_text(line)
+                matches = punct_pattern.finditer(line)
+                end_idx = 0
+                for m in matches:
+                    tokens = line[end_idx: m.start()].split()
+                    if len(tokens) == 0:
+                        end_idx = m.end()
+                        continue
+                    for t in tokens[:-1]:
+                        cur_examples.extend([(t.lower(), 'O', get_cap_label(t))])
+                    puncs = line[m.start(): m.end()]
+                    punc_label = 'O'
+                    if puncs in STRPUNC_MAPPING:
+                        punc_label = STRPUNC_MAPPING[puncs]
+                    else:
+                        for punc in list(puncs):
+                            if punc in STRPUNC_MAPPING:
+                                punc_label = STRPUNC_MAPPING[punc]
+                                break
+                    cur_examples.append((tokens[-1].lower(), punc_label, get_cap_label(tokens[-1])))
+                    end_idx = m.end()
+                if not restoration_punct(cur_examples) == line and debug:
+                    debug_count += 1
+                    print(f"===== Error Case {debug_count} =====")
+                    print(line)
+                    print(restoration_punct(cur_examples))
+                for example in cur_examples:
+                    dwriter.write(' '.join(example)+'\n')
+        dwriter.close()
 
 
-class PuncDataset(Dataset):
-    def __init__(self,
-                 data: pd.DataFrame,
-                 tokenizer,
-                 max_len: int,
-                 device: str = 'cpu'):
-        self.examples = data
-        self.tokenizer = tokenizer
-        self.max_len = max_len
-        self.device = device
-
-    def __getitem__(self, index):
-        sentence = self.examples.example[index]
-        labels = [PUNC_LABEL2ID.index(l) for l in self.examples.labels[index].split()]
-        label_masks = [1] * len(labels)
-        encoding = self.tokenizer(normalize_text(sentence),
-                                  padding='max_length',
-                                  truncation=True,
-                                  return_offsets_mapping=True,
-                                  max_length=self.max_len)
-        valid_id = np.zeros(len(encoding["offset_mapping"]), dtype=int)
-        i = 0
-        for idx, mapping in enumerate(encoding["offset_mapping"]):
-            if mapping == (0, 0) or (mapping[0] != 0 and mapping[0] == encoding["offset_mapping"][idx - 1][-1]):
-                continue
-            valid_id[idx] = 1
-            i += 1
-        label_padding_size = (self.max_len - len(labels))
-        labels.extend([0] * label_padding_size)
-        label_masks.extend([0] * label_padding_size)
-
-        encoding.pop('offset_mapping', None)
-        item = {key: torch.as_tensor(val).to(self.device, dtype=torch.long) for key, val in encoding.items()}
-        item['labels'] = torch.as_tensor(labels).to(self.device, dtype=torch.long)
-        item['valid_ids'] = torch.as_tensor(valid_id).to(self.device, dtype=torch.long)
-        item['label_masks'] = torch.as_tensor(label_masks).to(self.device, dtype=torch.long)
-        return item
-
-    def __len__(self):
-        return len(self.examples)
-
-
-def build_dataset(data_dir,
-                  tokenizer,
-                  data_type: str = 'train',
-                  max_seq_length: int = 128,
-                  overwrite_data: bool = False,
-                  device: str = 'cpu'):
-    data_file = Path(data_dir + f'/{data_type}.txt')
-    data_splitted_file = Path(data_dir + f'/{data_type}_splitted.txt')
-    assert os.path.exists(data_file) or os.path.exists(data_splitted_file), \
-        f'`{data_file}` not exists! Do you realy have a dataset?'
-    if not os.path.exists(data_splitted_file) or overwrite_data:
-        LOGGER.info("Slipt dataset to example. It will take a few minutes, calm down and wait!")
-        data_df = pd.read_csv(data_file, encoding='utf-8', sep=' ', names=['token', 'label'],
-                               keep_default_na=False)
-        data_df = split_example(data_df, EOS_MARKS, max_len=max_seq_length)
-        data_df.to_csv(data_splitted_file)
-    else:
-        data_df = pd.read_csv(data_splitted_file)
-    punc_dataset = PuncDataset(data_df, tokenizer, max_len=max_seq_length, device=device)
-    return punc_dataset
-
-
-#DEBUG
+# DEBUG
 if __name__ == "__main__":
-    raw_data_path = './datasets/Raw/sample.txt'
-    make_dataset(raw_data_path, split_test=True)
+    raw_data_path = './datasets/Raw/corpus-full.txt'
+    make_dataset(raw_data_path, split_test=True, debug=False)
