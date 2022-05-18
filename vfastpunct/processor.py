@@ -110,7 +110,31 @@ def make_dataset(data_file: Union[str, os.PathLike], split_test=False, test_rati
     test_writer.close()
 
 
+def visualize_dataset(dpath: Union[str or os.PathLike]):
+    import matplotlib.pyplot as plt
+    import dask.dataframe as dd
+    df = dd.read_csv(dpath, sep=' ', names=['word', 'plabel', 'clabel'])
+    plt.figure(figsize=(10, 7))
+    df[df['plabel'] != 'O'].plabel.value_counts().compute().plot(kind='bar')
+    plt.xlabel('Label')
+    plt.ylabel('Count')
+    plt.title('PLabel Distribution')
+    plt.show()
+    df.clabel.value_counts().compute().plot(kind='bar')
+    plt.xlabel('Label')
+    plt.ylabel('Count')
+    plt.title('CLabel Distribution')
+    plt.show()
+
+
 # DEBUG
 if __name__ == "__main__":
-    raw_data_path = '/media/datngo/Data4/puncdataset/corpus-full.txt'
-    make_dataset(raw_data_path, split_test=True, debug=False)
+    # raw_data_path = 'datasets/Raw/samples.txt'
+    # make_dataset(raw_data_path, split_test=True, debug=False)
+    train_data_path = 'datasets/Raw/train.txt'
+    # lines = open(train_data_path, 'r').readlines()
+    # with open('datasets/Raw/tmp.txt', 'w') as fw:
+    #     for i in range(10000000):
+    #         line = random.choice(lines)
+    #         fw.write(line)
+    visualize_dataset(dpath=train_data_path)
