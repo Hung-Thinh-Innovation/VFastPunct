@@ -44,8 +44,8 @@ def split_example_from_file(dpath: Union[str or os.PathLike], eos_marks: List[st
         sub_data = dataframe[idx: min(idx + max_len, num_token)]
         end_idx = sub_data[sub_data.plabel.isin(eos_marks)].tail(1).index
         if end_idx.empty:
-            end_idx = -1
-            example_df = dataframe.iloc[idx:]
+            end_idx = sub_data.index[-1] + 1
+            example_df = sub_data
         else:
             end_idx = end_idx.item() + 1
             example_df = dataframe.iloc[idx: end_idx]
@@ -183,6 +183,8 @@ def split_examples(ddir: Union[str or os.PathLike]):
 
 # DEBUG
 if __name__ == "__main__":
-    make_dataset('/media/datngo/Data4/puncdataset/corpus-full.txt', split_test=True, is_truncate=True)
-    split_examples('/media/datngo/Data4/puncdataset/')
+    # make_dataset('/media/datngo/Data4/puncdataset/corpus-full.txt', split_test=True, is_truncate=True)
+    # split_examples('/media/datngo/Data4/puncdataset/')
+    df = split_example_from_file('./datasets/Raw/train_000.txt', eos_marks=EOS_MARKS, max_len=190)
+    df.to_csv('./datasets/Raw/train_000.txt_splitted.txt')
 
