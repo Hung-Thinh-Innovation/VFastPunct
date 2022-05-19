@@ -77,11 +77,11 @@ def binary_search(a, x):
 
 def get_cap_label(token: str) -> str:
     if token.isupper():
-        return 'UPPER'
+        return 'U'
     elif token.istitle():
-        return 'TITLE'
+        return 'T'
     else:
-        return 'KEEP'
+        return 'O'
 
 
 def restoration_punct(examples: List):
@@ -96,7 +96,7 @@ def make_dataset(data_file: Union[str, os.PathLike],
                  split_test=False,
                  test_ratio: float = 0.2,
                  is_truncate: bool = False,
-                 truncate_size: int = 150000000):
+                 truncate_size: int = 80000000):
     punct_pattern = re.compile(f'[{punctuation}]+')
     raw_path = Path(data_file)
     train_trunc_id, test_trunc_id = 0, 0
@@ -183,7 +183,6 @@ def split_examples(ddir: Union[str or os.PathLike]):
 
 # DEBUG
 if __name__ == "__main__":
-    # make_dataset('datasets/Raw/corpus-full.txt', split_test=True, is_truncate=True)
-    split_examples('datasets/Raw/')
-    # visualize_dataset(dpath='datasets/Raw/train.txt')
-    # split_examples()
+    make_dataset('/media/datngo/Data4/puncdataset/corpus-full.txt', split_test=True, is_truncate=True)
+    split_examples('/media/datngo/Data4/puncdataset/')
+
