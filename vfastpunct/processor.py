@@ -96,7 +96,7 @@ def make_dataset(data_file: Union[str, os.PathLike],
                  split_test=False,
                  test_ratio: float = 0.2,
                  is_truncate: bool = False,
-                 truncate_size: int = 80000000):
+                 truncate_size: int = 150000000):
     punct_pattern = re.compile(f'[{punctuation}]+')
     raw_path = Path(data_file)
     train_trunc_id, test_trunc_id = 0, 0
@@ -183,8 +183,6 @@ def split_examples(ddir: Union[str or os.PathLike]):
 
 # DEBUG
 if __name__ == "__main__":
-    # make_dataset('/media/datngo/Data4/puncdataset/corpus-full.txt', split_test=True, is_truncate=True)
-    # split_examples('/media/datngo/Data4/puncdataset/')
-    df = split_example_from_file('./datasets/Raw/train_000.txt', eos_marks=EOS_MARKS, max_len=190)
-    df.to_csv('./datasets/Raw/train_000.txt_splitted.txt')
+    make_dataset('/media/datngo/Data4/puncdataset/corpus-full.txt', split_test=True, is_truncate=True)
+    split_examples('/media/datngo/Data4/puncdataset/')
 

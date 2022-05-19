@@ -22,6 +22,7 @@ def get_datasets(ddir: Union[str, os.PathLike],
                  max_seq_length: int = 190,
                  device: str = 'cpu') -> Generator:
     for f in glob.glob(str(Path(ddir+f'/{dtype}_*_splitted.txt'))):
+        LOGGER.info(f"Load file {f}")
         yield build_punccap_dataset(f, tokenizer, max_seq_length=max_seq_length, device=device)
 
 def validate(model, valid_iterator, is_test=False):
@@ -40,8 +41,8 @@ def validate(model, valid_iterator, is_test=False):
             clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
             eval_plabels.extend(plabels.cpu().tolist())
             eval_clabels.extend(clabels.cpu().tolist())
-            eval_ppreds.extend(list(itertools.chain(*eval_plogits[0])))
-            eval_cpreds.extend(list(itertools.chain(*eval_clogits[1])))
+            eval_ppreds.extend(list(itertools.chain(*eval_plogits)))
+            eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
     epoch_loss = eval_loss / nb_eval_steps
     if is_test:
         preports = classification_report(eval_plabels, eval_ppreds, zero_division=0)
@@ -153,6 +154,7 @@ def train():
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, eps=args.adam_epsilon)
     cumulative_early_steps = 0
+    trained_step = 0
     for epoch in range(int(args.epochs)):
         if cumulative_early_steps > args.early_stop:
             LOGGER.info(f"Hey!!! Early stopping. Check your saved model.")
@@ -161,7 +163,19 @@ def train():
             train_sampler = RandomSampler(train_dataset)
             train_iterator = DataLoader(train_dataset, sampler=train_sampler, batch_size=args.train_batch_size,
                                         num_workers=0)
+            trained_step += len(train_iterator)
             train_one_epoch(model, optimizer, train_iterator, max_grad_norm=args.max_grad_norm)
+            if trained_step > args.save_step:
+                saved_file = Path(args.output_dir + f"/backup_model.pt")
+                LOGGER.info(f"\t***Opps!!! Over save step, saving to {saved_file}...***")
+                saved_data = {
+                    'model': model.state_dict(),
+                    'pclasses': PUNC_LABEL2ID,
+                    'cclasses': CAP_LABEL2ID,
+                    'args': args
+                }
+                torch.save(saved_data, saved_file)
+                trained_step = 0
         eval_f1_score = 0.0
         for valid_dataset in get_datasets(args.data_dir, tokenizer, dtype='test',
                                           max_seq_length=args.max_seq_length, device=device):
