@@ -5,6 +5,7 @@ from torchcrf import CRF
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 logging.set_verbosity_error()
 
@@ -14,6 +15,66 @@ class PuncCapLstmConfig(BertConfig):
         super().__init__(**kwargs)
         self.num_plabels = num_plabels
         self.num_clabels = num_clabels
+
+
+class PuncCapBiLstmSoftmax(nn.Module):
+    def __init__(self, config):
+        super(PuncCapBiLstmSoftmax, self).__init__()
+        self.num_plabels = config.num_plabels
+        self.num_clabels = config.num_clabels
+        self.embeddings = BertEmbeddings(config)
+        self.bilstm = nn.LSTM(input_size=config.hidden_size,
+                            hidden_size=config.hidden_size // 2,
+                            num_layers=2,
+                            batch_first=True,
+                            bidirectional=True)
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = nn.Dropout(classifier_dropout)
+        self.p_classifier = nn.Linear(config.hidden_size, config.num_plabels)
+        # self.c_classifier = nn.Linear(config.hidden_size, config.num_clabels)
+        self.loss_func = nn.CrossEntropyLoss(ignore_index=0)
+
+    @classmethod
+    def from_pretrained(cls, model_name: str, config: PuncCapLstmConfig, from_tf: bool = False):
+        model = cls(config)
+        model.embeddings = BertModel.from_pretrained(model_name, config=config).embeddings
+        return model
+
+    def forward(self,
+                input_ids,
+                token_type_ids=None,
+                attention_mask=None,
+                plabels=None,
+                clabels=None,
+                valid_ids=None,
+                label_masks=None):
+        embedding_output =  self.embeddings(
+            input_ids=input_ids,
+            position_ids=None,
+            token_type_ids=token_type_ids,
+            inputs_embeds=None,
+            past_key_values_length=0,
+        )
+        seq_output, _ = self.bilstm(embedding_output)
+        sequence_output = self.dropout(seq_output)
+        p_logits = self.p_classifier(sequence_output)
+        # c_logits = self.c_classifier(sequence_output)
+
+        label_masks = label_masks.view(-1) != 0
+        seq_ptags = torch.masked_select(torch.argmax(F.log_softmax(p_logits, dim=2), dim=2).view(-1), label_masks).tolist()
+        # seq_ctags = torch.masked_select(torch.argmax(F.log_softmax(c_logits, dim=2), dim=2).view(-1), label_masks).tolist()
+        seq_ctags = []
+
+        if plabels is not None:
+            p_loss = self.loss_func(p_logits.view(-1, self.num_plabels), plabels.view(-1))
+            # c_loss = self.loss_func(c_logits.view(-1, self.num_clabels), clabels.view(-1))
+            # loss = p_loss + c_loss
+            loss = p_loss
+            return loss, p_loss, 0.0, seq_ptags, seq_ctags
+        else:
+            return seq_ptags, seq_ctags
 
 
 class PuncCapBiLstmCrf(nn.Module):
@@ -39,34 +100,6 @@ class PuncCapBiLstmCrf(nn.Module):
         model = cls(config)
         model.embeddings = BertModel.from_pretrained(model_name, config=config).embeddings
         return model
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None) -> nn.Embedding:
-        """
-        Resizes input token embeddings matrix of the model if `new_num_tokens != config.vocab_size`.
-
-        Takes care of tying weights embeddings afterwards if the model class has a `tie_weights()` method.
-
-        Arguments:
-            new_num_tokens (`int`, *optional*):
-                The number of new tokens in the embedding matrix. Increasing the size will add newly initialized
-                vectors at the end. Reducing the size will remove vectors from the end. If not provided or `None`, just
-                returns a pointer to the input tokens `torch.nn.Embedding` module of the model without doing anything.
-
-        Return:
-            `torch.nn.Embedding`: Pointer to the input tokens Embeddings Module of the model.
-        """
-        model_embeds = self._resize_token_embeddings(new_num_tokens)
-        if new_num_tokens is None:
-            return model_embeds
-
-        # Update base model and current model config
-        self.config.vocab_size = new_num_tokens
-        self.vocab_size = new_num_tokens
-
-        # Tie weights again if needed
-        self.tie_weights()
-
-        return model_embeds
 
     def forward(self,
                 input_ids,

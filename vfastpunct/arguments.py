@@ -29,7 +29,7 @@ def get_train_argument():
     parser.add_argument("--model_name_or_path", default='bert-base-multilingual-cased', type=str,
                         help="Pre-trained model selected in the list: bert-base-uncased, bert-base-cased...")
     parser.add_argument("--model_arch", default='lstm_crf', type=str,
-                        help="Punctuation prediction model architecture selected in the list: original, crf, lstm_crf.")
+                        help="Punctuation prediction model architecture selected in the list: original, lstm_softmax, crf, lstm_crf.")
     parser.add_argument("--output_dir", default='outputs/', type=str,
                         help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument("--max_seq_length", default=190, type=int,

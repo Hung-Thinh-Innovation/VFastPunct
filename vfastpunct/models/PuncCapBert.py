@@ -24,9 +24,9 @@ class PuncCapBertLstmCrf(BertForTokenClassification):
                             batch_first=True,
                             bidirectional=True)
         self.p_classifier = nn.Linear(config.hidden_size, config.num_plabels)
-        self.c_classifier = nn.Linear(config.hidden_size, config.num_clabels)
+        # self.c_classifier = nn.Linear(config.hidden_size, config.num_clabels)
         self.p_crf = CRF(config.num_plabels, batch_first=True)
-        self.c_crf = CRF(config.num_clabels, batch_first=True)
+        # self.c_crf = CRF(config.num_clabels, batch_first=True)
 
     def forward(self,
                 input_ids,
@@ -51,16 +51,17 @@ class PuncCapBertLstmCrf(BertForTokenClassification):
         sequence_output = self.dropout(valid_output)
 
         p_logits = self.p_classifier(sequence_output)
-        c_logits = self.c_classifier(sequence_output)
+        # c_logits = self.c_classifier(sequence_output)
 
         seq_ptags = self.p_crf.decode(p_logits, mask=label_masks != 0)
-        seq_ctags = self.c_crf.decode(c_logits, mask=label_masks != 0)
-
+        # seq_ctags = self.c_crf.decode(c_logits, mask=label_masks != 0)
+        seq_ctags = []
         if plabels is not None:
-            p_log_likelihood = self.p_crf(p_logits, plabels, mask=label_masks.type(torch.uint8))
-            c_log_likelihood = self.c_crf(c_logits, clabels, mask=label_masks.type(torch.uint8))
-            loss = -1.0 * (p_log_likelihood+c_log_likelihood)
-            return loss, seq_ptags, seq_ctags
+            p_log_likelihood = self.p_crf(p_logits, plabels, mask=label_masks.type(torch.uint8) != 0)
+            # c_log_likelihood = self.c_crf(c_logits, clabels, mask=label_masks.type(torch.uint8))
+            # loss = -1.0 * (p_log_likelihood+c_log_likelihood)
+            loss = -1.0 * (p_log_likelihood)
+            return loss, p_log_likelihood, 0.0, seq_ptags, seq_ctags
         else:
             return seq_ptags, seq_ctags
 

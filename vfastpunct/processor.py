@@ -96,7 +96,8 @@ def make_dataset(data_file: Union[str, os.PathLike],
                  split_test=False,
                  test_ratio: float = 0.2,
                  is_truncate: bool = False,
-                 truncate_size: int = 150000000):
+                 truncate_size: int = 150000000,
+                 skip_ratio: float = 0.0):
     punct_pattern = re.compile(f'[{punctuation}]+')
     raw_path = Path(data_file)
     train_trunc_id, test_trunc_id = 0, 0
@@ -106,6 +107,8 @@ def make_dataset(data_file: Union[str, os.PathLike],
     test_writer = open(Path(str(raw_path.parent) + f'/test_{test_trunc_id:03}.txt'), 'w') if split_test else None
     with open(raw_path, 'r', encoding='utf-8') as f:
         for idx, line in enumerate(tqdm(f, total=total_lines)):
+            if random.uniform(0, 1) < skip_ratio:
+                continue
             cur_examples = ''
             cur_count = 0
             line = normalize_text(line)
@@ -172,17 +175,17 @@ def visualize_dataset(dpath: Union[str or os.PathLike]):
     plt.show()
 
 
-def split_examples(ddir: Union[str or os.PathLike]):
+def split_examples(ddir: Union[str or os.PathLike], max_len:int = 190):
     import glob
     fpattern = str(Path(ddir + '/*_*.txt'))
     for f in tqdm(glob.glob(fpattern)):
         data_splitted_file = re.sub('\.txt', '_splitted.txt', f)
-        df = split_example_from_file(f, eos_marks=EOS_MARKS, max_len=190)
+        df = split_example_from_file(f, eos_marks=EOS_MARKS, max_len=max_len)
         df.to_csv(data_splitted_file)
 
 
 # DEBUG
 if __name__ == "__main__":
-    make_dataset('datasets/Raw/samples/samples.txt', split_test=True, is_truncate=True)
-    split_examples('datasets/Raw/samples/')
+    make_dataset('datasets/Raw/samples/samples.txt', split_test=True, is_truncate=True, skip_ratio=0.5)
+    split_examples('datasets/Raw/samples/', max_len=20)
 
