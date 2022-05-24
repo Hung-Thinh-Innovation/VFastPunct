@@ -1,6 +1,8 @@
-from torch.utils.data import Dataset
+from typing import Union
 from pathlib import Path
 
+from torch.utils.data import Dataset
+from tqdm import tqdm
 from vfastpunct.constants import LOGGER, EOS_MARKS, PUNC_LABEL2ID, CAP_LABEL2ID
 from vfastpunct.processor import normalize_text, split_example
 
@@ -35,10 +37,10 @@ class PuncCapDataset(Dataset):
 
     def convert_example_to_feature(self, data:pd.DataFrame):
         examples = []
-        for index in data:
-            sentence = data.example[index]
-            plabels = [PUNC_LABEL2ID.index(l) for l in data.plabels[index].split()]
-            clabels = [CAP_LABEL2ID.index(l) for l in data.clabels[index].split()]
+        for index, row in tqdm(data.iterrows(), total=len(data)):
+            sentence = row.example
+            plabels = [PUNC_LABEL2ID.index(l) for l in row.plabels.split()]
+            clabels = [CAP_LABEL2ID.index(l) for l in row.clabels.split()]
             label_masks = [1] * len(plabels)
             encoding = self.tokenizer(normalize_text(sentence),
                                       padding='max_length',
@@ -58,36 +60,44 @@ class PuncCapDataset(Dataset):
             label_masks.extend([0] * label_padding_size)
 
             encoding.pop('offset_mapping', None)
-            items = {key: torch.as_tensor(val).to(self.device, dtype=torch.long) for key, val in encoding.items()}
-            items['plabels'] = torch.as_tensor(plabels).to(self.device, dtype=torch.long)
-            items['clabels'] = torch.as_tensor(clabels).to(self.device, dtype=torch.long)
-            items['valid_ids'] = torch.as_tensor(valid_id).to(self.device, dtype=torch.long)
-            items['label_masks'] = torch.as_tensor(label_masks).to(self.device, dtype=torch.long)
+            items = {key: val for key, val in encoding.items()}
+            items['plabels'] = plabels
+            items['clabels'] = clabels
+            items['valid_ids'] = valid_id
+            items['label_masks'] = label_masks
             examples.append(PuncCapFeatures(**items))
         return examples
 
     def __getitem__(self, index):
-        return self.examples[index].__dict__
+        return {key: val.to(self.device) for key, val in self.examples[index].__dict__}
 
     def __len__(self):
         return len(self.examples)
 
 
-def build_punccap_dataset(dfile,
+def build_punccap_dataset(dfile: Union[str, os.PathLike],
                   tokenizer,
                   data_type: str = 'train',
                   max_seq_length: int = 128,
                   overwrite_data: bool = False,
                   device: str = 'cpu'):
-    data_df = pd.read_csv(dfile)
-    punc_dataset = PuncCapDataset(data_df, tokenizer, max_len=max_seq_length, device=device)
+    dfile = Path(dfile)
+    cached_features_file = dfile.with_suffix('.cached')
+    if os.path.exists(cached_features_file):
+        punc_dataset = torch.load(cached_features_file)
+    else:
+        LOGGER.info("Creating features from dataset file at %s", dfile)
+        data_df = pd.read_csv(dfile)
+        punc_dataset = PuncCapDataset(data_df, tokenizer, max_len=max_seq_length, device=device)
+        LOGGER.info("Saving features into cached file %s", cached_features_file)
+        torch.save(punc_dataset, cached_features_file)
     return punc_dataset
 
 
 if __name__ == "__main__":
     from transformers import AutoTokenizer
     from torch.utils.data import DataLoader, RandomSampler
-    d = build_punccap_dataset('/media/datngo/Data4/puncdataset/splitted/train_000_splitted.txt',
+    d = build_punccap_dataset('./datasets/Raw/train_000_splitted.txt',
                           tokenizer=AutoTokenizer.from_pretrained('bert-base-multilingual-cased'),
                           max_seq_length=190,
                           device='cuda')

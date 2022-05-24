@@ -1,5 +1,6 @@
 from vfastpunct.log import init_logger
-from vfastpunct.models import PuncBertLstmCrf
+from vfastpunct.models import PuncBertLstmCrf, PuncCapBertLstmCrf, PuncCapBertConfig
+from transformers import AutoConfig
 
 LOGGER = init_logger()
 EOS_MARKS = ["PERIOD", "QMARK", "EXCLAM"]
@@ -39,7 +40,13 @@ STRPUNC_MAPPING = {
 
 MODEL_MAPPING = {
     'mBertLstmCrf': (PuncBertLstmCrf,
+                     AutoConfig,
                      'bert-base-multilingual-cased',
                      '/tmp/bertlstmcrf.pt',
-                     '17Ru3-tA98jcuV64rchf_zpfUj2K-TuZg')
+                     '17Ru3-tA98jcuV64rchf_zpfUj2K-TuZg'),
+    'mBertLstmCrf_PuncCap': (PuncCapBertLstmCrf,
+                             PuncCapBertConfig,
+                             'bert-base-multilingual-cased',
+                             './backup_model.pt',
+                             '')
 }
