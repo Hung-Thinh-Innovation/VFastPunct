@@ -176,13 +176,13 @@ def split_examples(ddir: Union[str or os.PathLike]):
     import glob
     fpattern = str(Path(ddir + '/*_*.txt'))
     for f in tqdm(glob.glob(fpattern)):
-        data_splitted_file = Path(f+'_splitted.txt')
+        data_splitted_file = re.sub('\.txt', '_splitted.txt', f)
         df = split_example_from_file(f, eos_marks=EOS_MARKS, max_len=190)
         df.to_csv(data_splitted_file)
 
 
 # DEBUG
 if __name__ == "__main__":
-    make_dataset('/media/datngo/Data4/puncdataset/corpus-full.txt', split_test=True, is_truncate=True)
-    split_examples('/media/datngo/Data4/puncdataset/')
+    make_dataset('datasets/Raw/samples/samples.txt', split_test=True, is_truncate=True)
+    split_examples('datasets/Raw/samples/')
 

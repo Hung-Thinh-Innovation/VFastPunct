@@ -69,7 +69,7 @@ class PuncCapDataset(Dataset):
         return examples
 
     def __getitem__(self, index):
-        return {key: val.to(self.device) for key, val in self.examples[index].__dict__}
+        return {key: val.to(self.device) for key, val in self.examples[index].__dict__.items()}
 
     def __len__(self):
         return len(self.examples)
@@ -85,6 +85,7 @@ def build_punccap_dataset(dfile: Union[str, os.PathLike],
     cached_features_file = dfile.with_suffix('.cached')
     if os.path.exists(cached_features_file):
         punc_dataset = torch.load(cached_features_file)
+        punc_dataset.device=device
     else:
         LOGGER.info("Creating features from dataset file at %s", dfile)
         data_df = pd.read_csv(dfile)
@@ -97,10 +98,10 @@ def build_punccap_dataset(dfile: Union[str, os.PathLike],
 if __name__ == "__main__":
     from transformers import AutoTokenizer
     from torch.utils.data import DataLoader, RandomSampler
-    d = build_punccap_dataset('./datasets/Raw/train_000_splitted.txt',
+    d = build_punccap_dataset('./datasets/Raw/samples/train_000_splitted.txt',
                           tokenizer=AutoTokenizer.from_pretrained('bert-base-multilingual-cased'),
                           max_seq_length=190,
-                          device='cuda')
+                          device='cpu')
 
     train_sampler = RandomSampler(d)
     train_iterator = DataLoader(d, sampler=train_sampler, batch_size=32, num_workers=0)
