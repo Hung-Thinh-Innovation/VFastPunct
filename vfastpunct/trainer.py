@@ -149,7 +149,7 @@ def train():
                                                num_clabels=len(CAP_LABEL2ID),
                                                finetuning_task="vipunc")
     model = PuncCapBiLstmCrf.from_pretrained(args.model_name_or_path, config=config, from_tf=False)
-    model.resize_token_embeddings(len(tokenizer))
+    # model.resize_token_embeddings(len(tokenizer))
     model.to(device)
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, eps=args.adam_epsilon)
