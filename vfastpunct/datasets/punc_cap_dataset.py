@@ -1,4 +1,4 @@
-from typing import Union
+from typing import Union, List
 from pathlib import Path
 
 from torch.utils.data import Dataset
@@ -24,49 +24,44 @@ class PuncCapFeatures(object):
         self.label_masks = torch.as_tensor(label_masks, dtype=torch.long)
 
 
+def convert_example_to_feature(data:pd.DataFrame, tokenizer, max_len: int = 190):
+    examples = []
+    for index, row in tqdm(data.iterrows(), total=len(data)):
+        sentence = row.example
+        plabels = [PUNC_LABEL2ID.index(l) for l in row.plabels.split()]
+        clabels = [CAP_LABEL2ID.index(l) for l in row.clabels.split()]
+        label_masks = [1] * len(plabels)
+        encoding = tokenizer(normalize_text(sentence),
+                             padding='max_length',
+                             truncation=True,
+                             return_offsets_mapping=True,
+                             max_length=max_len)
+        valid_id = np.zeros(len(encoding["offset_mapping"]), dtype=int)
+        i = 0
+        for idx, mapping in enumerate(encoding["offset_mapping"]):
+            if mapping == (0, 0) or (mapping[0] != 0 and mapping[0] == encoding["offset_mapping"][idx - 1][-1]):
+                continue
+            valid_id[idx] = 1
+            i += 1
+        label_padding_size = (max_len - len(plabels))
+        plabels.extend([0] * label_padding_size)
+        clabels.extend([0] * label_padding_size)
+        label_masks.extend([0] * label_padding_size)
+
+        encoding.pop('offset_mapping', None)
+        items = {key: val for key, val in encoding.items()}
+        items['plabels'] = plabels
+        items['clabels'] = clabels
+        items['valid_ids'] = valid_id
+        items['label_masks'] = label_masks
+        examples.append(PuncCapFeatures(**items))
+    return examples
+
+
 class PuncCapDataset(Dataset):
-    def __init__(self,
-                 data: pd.DataFrame,
-                 tokenizer,
-                 max_len: int,
-                 device: str = 'cpu'):
-        self.tokenizer = tokenizer
-        self.max_len = max_len
+    def __init__(self, examples: List[PuncCapFeatures], device: str = 'cpu'):
         self.device = device
-        self.examples = self.convert_example_to_feature(data)
-
-    def convert_example_to_feature(self, data:pd.DataFrame):
-        examples = []
-        for index, row in tqdm(data.iterrows(), total=len(data)):
-            sentence = row.example
-            plabels = [PUNC_LABEL2ID.index(l) for l in row.plabels.split()]
-            clabels = [CAP_LABEL2ID.index(l) for l in row.clabels.split()]
-            label_masks = [1] * len(plabels)
-            encoding = self.tokenizer(normalize_text(sentence),
-                                      padding='max_length',
-                                      truncation=True,
-                                      return_offsets_mapping=True,
-                                      max_length=self.max_len)
-            valid_id = np.zeros(len(encoding["offset_mapping"]), dtype=int)
-            i = 0
-            for idx, mapping in enumerate(encoding["offset_mapping"]):
-                if mapping == (0, 0) or (mapping[0] != 0 and mapping[0] == encoding["offset_mapping"][idx - 1][-1]):
-                    continue
-                valid_id[idx] = 1
-                i += 1
-            label_padding_size = (self.max_len - len(plabels))
-            plabels.extend([0] * label_padding_size)
-            clabels.extend([0] * label_padding_size)
-            label_masks.extend([0] * label_padding_size)
-
-            encoding.pop('offset_mapping', None)
-            items = {key: val for key, val in encoding.items()}
-            items['plabels'] = plabels
-            items['clabels'] = clabels
-            items['valid_ids'] = valid_id
-            items['label_masks'] = label_masks
-            examples.append(PuncCapFeatures(**items))
-        return examples
+        self.examples = examples
 
     def __getitem__(self, index):
         return {key: val.to(self.device) for key, val in self.examples[index].__dict__.items()}
@@ -84,15 +79,14 @@ def build_punccap_dataset(dfile: Union[str, os.PathLike],
     dfile = Path(dfile)
     cached_features_file = dfile.with_suffix('.cached')
     if os.path.exists(cached_features_file):
-        punc_dataset = torch.load(cached_features_file)
-        punc_dataset.device=device
+        punccap_examples = torch.load(cached_features_file)
     else:
         LOGGER.info("Creating features from dataset file at %s", dfile)
         data_df = pd.read_csv(dfile)
-        punc_dataset = PuncCapDataset(data_df, tokenizer, max_len=max_seq_length, device=device)
+        punccap_examples = convert_example_to_feature(data_df, tokenizer, max_len=max_seq_length)
         LOGGER.info("Saving features into cached file %s", cached_features_file)
-        torch.save(punc_dataset, cached_features_file)
-    return punc_dataset
+        torch.save(punccap_examples, cached_features_file)
+    return PuncCapDataset(punccap_examples, device=device)
 
 
 if __name__ == "__main__":
