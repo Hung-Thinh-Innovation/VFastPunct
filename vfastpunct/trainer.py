@@ -4,7 +4,7 @@ from pathlib import Path
 from vfastpunct.arguments import get_train_argument, get_test_argument
 from vfastpunct.constants import LOGGER, PUNC_LABEL2ID, CAP_LABEL2ID
 from vfastpunct.datasets import build_dataset, build_punccap_dataset
-from vfastpunct.models import PuncBertLstmCrf, PuncCapBertLstmCrf, PuncCapBertConfig
+from vfastpunct.models import PuncBertLstmCrf, PuncCapBertLstmCrf, PuncCapBertConfig, PuncCapLstmConfig, PuncCapBiLstmCrf
 from sklearn.metrics import classification_report
 from transformers import AutoConfig, AutoTokenizer
 from torch.utils.data import DataLoader, RandomSampler
@@ -129,7 +129,7 @@ def train():
     #                               max_seq_length=args.max_seq_length,
     #                               overwrite_data=args.overwrite_data,
     #                               device=device)
-    #
+
     # valid_dataset = build_dataset(args.data_dir,
     #                               tokenizer=tokenizer,
     #                               data_type='valid',
@@ -144,11 +144,11 @@ def train():
     # config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=len(PUNC_LABEL2ID),
     #                                     finetuning_task="vipunc")
     # model = PuncBertLstmCrf.from_pretrained(args.model_name_or_path, config=config, from_tf=False)
-    config = PuncCapBertConfig.from_pretrained(args.model_name_or_path,
+    config = PuncCapLstmConfig.from_pretrained(args.model_name_or_path,
                                                num_plabels=len(PUNC_LABEL2ID),
                                                num_clabels=len(CAP_LABEL2ID),
                                                finetuning_task="vipunc")
-    model = PuncCapBertLstmCrf.from_pretrained(args.model_name_or_path, config=config, from_tf=False)
+    model = PuncCapBiLstmCrf.from_pretrained(args.model_name_or_path, config=config, from_tf=False)
     model.resize_token_embeddings(len(tokenizer))
     model.to(device)
 
