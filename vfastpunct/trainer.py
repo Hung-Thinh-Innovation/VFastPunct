@@ -41,30 +41,30 @@ def validate(model, valid_iterator, is_test=False):
             loss, ploss, closs, eval_plogits, eval_clogits = model(**batch)
             eval_loss += loss.item()
             eval_ploss += ploss.item()
-            # eval_closs += closs.item()
+            eval_closs += closs.item()
             nb_eval_steps += 1
             active_accuracy = batch['label_masks'].view(-1) != 0
             plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
-            # clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
+            clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
             eval_plabels.extend(plabels.cpu().tolist())
-            # eval_clabels.extend(clabels.cpu().tolist())
+            eval_clabels.extend(clabels.cpu().tolist())
             if isinstance(eval_plogits[-1], list):
                 eval_ppreds.extend(list(itertools.chain(*eval_plogits)))
-                # eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
+                eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
             else:
                 eval_ppreds.extend(eval_plogits)
-                # eval_cpreds.extend(eval_clogits)
+                eval_cpreds.extend(eval_clogits)
     epoch_loss = eval_loss / nb_eval_steps
     epoch_ploss = eval_ploss / nb_eval_steps
-    # epoch_closs = eval_closs / nb_eval_steps
+    epoch_closs = eval_closs / nb_eval_steps
     if is_test:
         preports = classification_report(eval_plabels, eval_ppreds, zero_division=0)
-        # creports = classification_report(eval_clabels, eval_cpreds, zero_division=0)
+        creports = classification_report(eval_clabels, eval_cpreds, zero_division=0)
         LOGGER.info(f'\tTest Loss: {eval_loss}; Spend time: {time.time() - start_time}')
         LOGGER.info('Punct Report:')
         LOGGER.info(preports)
         LOGGER.info('Cap Report:')
-        # LOGGER.info(creports)
+        LOGGER.info(creports)
         return epoch_loss
     else:
         preports = classification_report(eval_plabels, eval_ppreds, output_dict=True, zero_division=0)
@@ -72,9 +72,9 @@ def validate(model, valid_iterator, is_test=False):
         macro_avg = creports['macro avg']['f1-score'] + preports['macro avg']['f1-score']
         acc_avg = creports['accuracy'] + preports['accuracy']
         LOGGER.info(f"{'*'*10}Validate Summary{'*'*10}")
-        LOGGER.info(f"\tValidation Loss: {eval_loss} (pLoss: {epoch_ploss}; cLoss: {0.0});\n"
-                    f"\tAccuracy: {acc_avg:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {0.0:.4f});\n"
-                    f"\tMacro-F1 score: {macro_avg:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {0.0:.4f});\n"
+        LOGGER.info(f"\tValidation Loss: {eval_loss} (pLoss: {epoch_ploss:.4f}; cLoss: {epoch_closs:.4f});\n"
+                    f"\tAccuracy: {acc_avg:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {creports['accuracy']:.4f});\n"
+                    f"\tMacro-F1 score: {macro_avg:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {creports['macro avg']['f1-score']:.4f});\n"
                     f"\tSpend time: {time.time() - start_time}")
         return epoch_loss, acc_avg, macro_avg
 
