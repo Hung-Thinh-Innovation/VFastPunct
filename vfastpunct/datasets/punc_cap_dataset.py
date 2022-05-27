@@ -84,15 +84,9 @@ def build_punccap_dataset(dfile: Union[str, os.PathLike],
                           device: str = 'cpu',
                           use_crf: bool = False):
     dfile = Path(dfile)
-    cached_features_file = dfile.with_suffix('.cached')
-    if os.path.exists(cached_features_file):
-        punccap_examples = torch.load(cached_features_file)
-    else:
-        LOGGER.info("Creating features from dataset file at %s", dfile)
-        data_df = pd.read_csv(dfile)
-        punccap_examples = convert_example_to_feature(data_df, tokenizer, max_len=max_seq_length, use_crf=use_crf)
-        # LOGGER.info("Saving features into cached file %s", cached_features_file)
-        # torch.save(punccap_examples, cached_features_file)
+    LOGGER.info("Creating features from dataset file at %s", dfile)
+    data_df = pd.read_csv(dfile)
+    punccap_examples = convert_example_to_feature(data_df, tokenizer, max_len=max_seq_length, use_crf=use_crf)
     return PuncCapDataset(punccap_examples, device=device)
 
 

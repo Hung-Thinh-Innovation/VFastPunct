@@ -29,7 +29,7 @@ def get_datasets(ddir: Union[str, os.PathLike],
         yield build_punccap_dataset(f, tokenizer, max_seq_length=max_seq_length, device=device, use_crf=use_crf)
 
 
-def validate(model, valid_iterator, is_test=False):
+def validate(model, valid_iterator, scheduler=None, is_test=False):
     start_time = time.time()
     model.eval()
     eval_loss, nb_eval_steps = 0.0, 0.0
@@ -40,22 +40,22 @@ def validate(model, valid_iterator, is_test=False):
         loss, ploss, closs, eval_plogits, eval_clogits = model(**batch)
         eval_loss += loss.item()
         eval_ploss += ploss.item()
-        # eval_closs += closs.item()
+        eval_closs += closs.item()
         nb_eval_steps += 1
         active_accuracy = batch['label_masks'].view(-1) != 0
         plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
-        # clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
+        clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
         eval_plabels.extend(plabels.cpu().tolist())
-        # eval_clabels.extend(clabels.cpu().tolist())
+        eval_clabels.extend(clabels.cpu().tolist())
         if isinstance(eval_plogits[-1], list):
             eval_ppreds.extend(list(itertools.chain(*eval_plogits)))
-            # eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
+            eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
         else:
             eval_ppreds.extend(eval_plogits)
-            # eval_cpreds.extend(eval_clogits)
+            eval_cpreds.extend(eval_clogits)
     epoch_loss = eval_loss / nb_eval_steps
     epoch_ploss = eval_ploss / nb_eval_steps
-    # epoch_closs = eval_closs / nb_eval_steps
+    epoch_closs = eval_closs / nb_eval_steps
     if is_test:
         preports = classification_report(eval_plabels, eval_ppreds, zero_division=0)
         creports = classification_report(eval_clabels, eval_cpreds, zero_division=0)
@@ -67,13 +67,15 @@ def validate(model, valid_iterator, is_test=False):
         return epoch_loss
     else:
         preports = classification_report(eval_plabels, eval_ppreds, output_dict=True, zero_division=0)
-        # creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
-        macro_avg = preports['macro avg']['f1-score']
-        acc_avg =  preports['accuracy']
+        creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
+        macro_avg = (preports['macro avg']['f1-score'] + creports['macro avg']['f1-score'])/2
+        acc_avg = (preports['accuracy'] + creports['accuracy'])/2
+        if scheduler is not None:
+            scheduler.step(macro_avg)
         LOGGER.info(f"{'*'*10}Validate Summary{'*'*10}")
-        LOGGER.info(f"\tValidation Loss: {eval_loss} (pLoss: {epoch_ploss:.4f}; cLoss: {0.0:.4f});\n"
-                    f"\tAccuracy: {acc_avg:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {0.0:.4f});\n"
-                    f"\tMacro-F1 score: {macro_avg:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {0.0:.4f});\n"
+        LOGGER.info(f"\tValidation Loss: {eval_loss} (pLoss: {epoch_ploss:.4f}; cLoss: {epoch_closs:.4f});\n"
+                    f"\tAccuracy: {acc_avg:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {creports['accuracy']:.4f});\n"
+                    f"\tMacro-F1 score: {macro_avg:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {creports['macro avg']['f1-score']:.4f});\n"
                     f"\tSpend time: {time.time() - start_time}")
         return epoch_loss, acc_avg, macro_avg
 
@@ -86,14 +88,13 @@ def train_one_epoch(model, optimizer, train_iterator, max_grad_norm: float = 1.0
         loss, _, _, _, _ = model(**batch)
         tr_loss += loss.item()
         nb_tr_steps += 1
-        # torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
+        torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
         # backward pass
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
     epoch_loss = tr_loss / nb_tr_steps
-    LOGGER.info(f"\tTraining Loss: {epoch_loss}; "
-                f"Spend time: {time.time() - start_time}")
+    LOGGER.info(f"\tTraining Lr: {optimizer.param_groups[0]['lr']}; Loss: {epoch_loss}; Spend time: {time.time() - start_time}")
     return epoch_loss
 
 
@@ -143,11 +144,10 @@ def train():
                                                finetuning_task="vipunc")
     if 'crf' in args.model_arch:
         use_crf = True
-        # config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=len(PUNC_LABEL2ID),
-        #                                     finetuning_task="vipunc")
-        # model = PuncBertLstmCrf.from_pretrained(args.model_name_or_path, config=config, from_tf=False)
+        config = AutoConfig.from_pretrained(args.model_name_or_path, num_labels=len(PUNC_LABEL2ID),
+                                            finetuning_task="vipunc")
         model = PuncCapBertLstmCrf.from_pretrained(args.model_name_or_path, config=config, from_tf=False)
-        # model.resize_token_embeddings(len(tokenizer))
+        model.resize_token_embeddings(len(tokenizer))
     else:
         model = PuncCapBiLstmSoftmax.from_pretrained(args.model_name_or_path, config=config, from_tf=False)
     model.to(device)
@@ -159,12 +159,13 @@ def train():
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)
     cumulative_early_steps = 0
     trained_step = 0
     for epoch in range(int(args.epochs)):
         if cumulative_early_steps > args.early_stop:
             LOGGER.info(f"Hey!!! Early stopping. Check your saved model.")
-        LOGGER.info(f"Training epoch {epoch}")
+        LOGGER.info(f"\n{'='*30}Training epoch {epoch}{'='*30}")
         for train_dataset in get_datasets(args.data_dir,
                                           tokenizer,
                                           max_seq_length=args.max_seq_length,
@@ -190,9 +191,9 @@ def train():
                 trained_step = 0
         eval_f1_score = 0.0
         for valid_dataset in get_datasets(args.data_dir, tokenizer, dtype='test',
-                                          max_seq_length=args.max_seq_length, device=device):
-            valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=False, num_workers=0)
-            _, _, eval_f1_score = validate(model, valid_iterator)
+                                          max_seq_length=args.max_seq_length, device=device, use_crf=use_crf):
+            valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
+            _, _, eval_f1_score = validate(model, valid_iterator, scheduler)
         LOGGER.info(f"\tEpoch F1 score = {eval_f1_score} ; Best score = {best_score}")
         if eval_f1_score > best_score:
             best_score = eval_f1_score
