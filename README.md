@@ -1,11 +1,11 @@
 <h1 align="center">🛠️VFastPunct</h1>
 
-Code by **Trong-Dat Ngo**.
+Code by 🧑‍💻**Trong-Dat Ngo**.
 
-Fast punctuation and capitalization restoration using Transformer Models for Vietnamese
+Fast punctuation and capitalization restoration using Transformer Models for 🇻🇳Vietnamese
 
 ## Installation
-This repository is tested on Python 3.7+ and PyTorch 1.8.2+, as well as it works fine on macOS, Windows, Linux.
+This repository is tested on 🐍Python 3.7+ and 🔥PyTorch 1.8.2+, as well as it works fine on macOS, Windows, Linux.
 ```bash
 pip install VFastPunct
 ```
