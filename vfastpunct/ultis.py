@@ -26,3 +26,8 @@ def download_file_from_google_drive(id, destination, confirm=None):
         params = {'id': id, 'confirm': token}
         response = session.get(URL, params=params, stream=True)
     save_response_content(response, destination)
+
+
+# Debug
+if __name__ == "__main__":
+    download_file_from_google_drive('1Iv3iQfuA7NWRa2lQgWVn4fMLk4-XkWwZ', './mbertpunccap.pt', 't')
