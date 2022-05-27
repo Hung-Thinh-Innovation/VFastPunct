@@ -36,27 +36,26 @@ def validate(model, valid_iterator, is_test=False):
     eval_ploss, eval_closs = 0.0, 0.0
     eval_ppreds, eval_plabels = [], []
     eval_cpreds, eval_clabels = [], []
-    with torch.no_grad():
-        for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), position=0, leave=True):
-            loss, ploss, closs, eval_plogits, eval_clogits = model(**batch)
-            eval_loss += loss.item()
-            eval_ploss += ploss.item()
-            eval_closs += closs.item()
-            nb_eval_steps += 1
-            active_accuracy = batch['label_masks'].view(-1) != 0
-            plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
-            clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
-            eval_plabels.extend(plabels.cpu().tolist())
-            eval_clabels.extend(clabels.cpu().tolist())
-            if isinstance(eval_plogits[-1], list):
-                eval_ppreds.extend(list(itertools.chain(*eval_plogits)))
-                eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
-            else:
-                eval_ppreds.extend(eval_plogits)
-                eval_cpreds.extend(eval_clogits)
+    for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), position=0, leave=True):
+        loss, ploss, closs, eval_plogits, eval_clogits = model(**batch)
+        eval_loss += loss.item()
+        eval_ploss += ploss.item()
+        # eval_closs += closs.item()
+        nb_eval_steps += 1
+        active_accuracy = batch['label_masks'].view(-1) != 0
+        plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
+        # clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
+        eval_plabels.extend(plabels.cpu().tolist())
+        # eval_clabels.extend(clabels.cpu().tolist())
+        if isinstance(eval_plogits[-1], list):
+            eval_ppreds.extend(list(itertools.chain(*eval_plogits)))
+            # eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
+        else:
+            eval_ppreds.extend(eval_plogits)
+            # eval_cpreds.extend(eval_clogits)
     epoch_loss = eval_loss / nb_eval_steps
     epoch_ploss = eval_ploss / nb_eval_steps
-    epoch_closs = eval_closs / nb_eval_steps
+    # epoch_closs = eval_closs / nb_eval_steps
     if is_test:
         preports = classification_report(eval_plabels, eval_ppreds, zero_division=0)
         creports = classification_report(eval_clabels, eval_cpreds, zero_division=0)
@@ -68,13 +67,13 @@ def validate(model, valid_iterator, is_test=False):
         return epoch_loss
     else:
         preports = classification_report(eval_plabels, eval_ppreds, output_dict=True, zero_division=0)
-        creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
-        macro_avg = creports['macro avg']['f1-score'] + preports['macro avg']['f1-score']
-        acc_avg = creports['accuracy'] + preports['accuracy']
+        # creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
+        macro_avg = preports['macro avg']['f1-score']
+        acc_avg =  preports['accuracy']
         LOGGER.info(f"{'*'*10}Validate Summary{'*'*10}")
-        LOGGER.info(f"\tValidation Loss: {eval_loss} (pLoss: {epoch_ploss:.4f}; cLoss: {epoch_closs:.4f});\n"
-                    f"\tAccuracy: {acc_avg:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {creports['accuracy']:.4f});\n"
-                    f"\tMacro-F1 score: {macro_avg:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {creports['macro avg']['f1-score']:.4f});\n"
+        LOGGER.info(f"\tValidation Loss: {eval_loss} (pLoss: {epoch_ploss:.4f}; cLoss: {0.0:.4f});\n"
+                    f"\tAccuracy: {acc_avg:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {0.0:.4f});\n"
+                    f"\tMacro-F1 score: {macro_avg:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {0.0:.4f});\n"
                     f"\tSpend time: {time.time() - start_time}")
         return epoch_loss, acc_avg, macro_avg
 
@@ -87,10 +86,11 @@ def train_one_epoch(model, optimizer, train_iterator, max_grad_norm: float = 1.0
         loss, _, _, _, _ = model(**batch)
         tr_loss += loss.item()
         nb_tr_steps += 1
-        torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
+        # torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
+        # backward pass
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-        model.zero_grad()
     epoch_loss = tr_loss / nb_tr_steps
     LOGGER.info(f"\tTraining Loss: {epoch_loss}; "
                 f"Spend time: {time.time() - start_time}")

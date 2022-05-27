@@ -38,8 +38,8 @@ def convert_example_to_feature(data:pd.DataFrame, tokenizer, max_len: int = 190,
                              max_length=max_len)
 
         valid_id = np.ones(len(encoding["offset_mapping"]), dtype=int)
-        valid_plabels = np.zeros(len(encoding["offset_mapping"]), dtype=int)
-        valid_clabels = np.zeros(len(encoding["offset_mapping"]), dtype=int)
+        valid_plabels = np.ones(len(encoding["offset_mapping"]), dtype=int) * -100
+        valid_clabels = np.ones(len(encoding["offset_mapping"]), dtype=int) * -100
 
         i = 0
         for idx, mapping in enumerate(encoding["offset_mapping"]):
@@ -99,13 +99,14 @@ def build_punccap_dataset(dfile: Union[str, os.PathLike],
 if __name__ == "__main__":
     from transformers import AutoTokenizer
     from torch.utils.data import DataLoader, RandomSampler
-    d = build_punccap_dataset('./datasets/Raw/samples/train_000_splitted.txt',
-                          tokenizer=AutoTokenizer.from_pretrained('bert-base-multilingual-cased'),
-                          max_seq_length=190,
-                          device='cpu')
 
-    train_sampler = RandomSampler(d)
-    train_iterator = DataLoader(d, sampler=train_sampler, batch_size=32, num_workers=0)
-    for b in train_iterator:
-        print(b)
+    data_df = pd.read_csv('./datasets/Raw/samples/train.txt')
+    tokenizer = AutoTokenizer.from_pretrained('bert-base-multilingual-cased')
+    punccap_examples = convert_example_to_feature(data_df,
+                                                 tokenizer=tokenizer,
+                                                  max_len=190,
+                                                  use_crf=False)
 
+    d = PuncCapDataset(punccap_examples, device='cpu')
+
+    print(d[0])

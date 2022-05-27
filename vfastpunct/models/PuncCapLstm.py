@@ -33,8 +33,8 @@ class PuncCapBiLstmSoftmax(nn.Module):
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.p_classifier = nn.Linear(config.hidden_size, config.num_plabels)
-        self.c_classifier = nn.Linear(config.hidden_size, config.num_clabels)
-        self.loss_func = nn.CrossEntropyLoss(ignore_index=0)
+        # self.c_classifier = nn.Linear(config.hidden_size, config.num_clabels)
+        self.loss_func = nn.CrossEntropyLoss()
 
     @classmethod
     def from_pretrained(cls, model_name: str, config: PuncCapLstmConfig, from_tf: bool = False):
@@ -60,17 +60,18 @@ class PuncCapBiLstmSoftmax(nn.Module):
         seq_output, _ = self.bilstm(embedding_output)
         sequence_output = self.dropout(seq_output)
         p_logits = self.p_classifier(sequence_output)
-        c_logits = self.c_classifier(sequence_output)
+        # c_logits = self.c_classifier(sequence_output)
 
         label_masks = label_masks.view(-1) != 0
         seq_ptags = torch.masked_select(torch.argmax(F.log_softmax(p_logits, dim=2), dim=2).view(-1), label_masks).tolist()
-        seq_ctags = torch.masked_select(torch.argmax(F.log_softmax(c_logits, dim=2), dim=2).view(-1), label_masks).tolist()
-
+        # seq_ctags = torch.masked_select(torch.argmax(F.log_softmax(c_logits, dim=2), dim=2).view(-1), label_masks).tolist()
+        seq_ctags = []
         if plabels is not None:
             p_loss = self.loss_func(p_logits.view(-1, self.num_plabels), plabels.view(-1))
-            c_loss = self.loss_func(c_logits.view(-1, self.num_clabels), clabels.view(-1))
-            loss = p_loss + c_loss
-            return loss, p_loss, c_loss, seq_ptags, seq_ctags
+            # c_loss = self.loss_func(c_logits.view(-1, self.num_clabels), clabels.view(-1))
+            # loss = p_loss + c_loss
+            loss = p_loss
+            return loss, p_loss, 0.0, seq_ptags, seq_ctags
         else:
             return seq_ptags, seq_ctags
 
