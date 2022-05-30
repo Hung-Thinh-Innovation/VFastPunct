@@ -26,3 +26,13 @@ def download_file_from_google_drive(id, destination, confirm=None):
         params = {'id': id, 'confirm': token}
         response = session.get(URL, params=params, stream=True)
     save_response_content(response, destination)
+
+
+def get_total_model_parameters(model):
+    total_params, trainable_params = 0, 0
+    for name, parameter in model.named_parameters():
+        params = parameter.numel()
+        if parameter.requires_grad:
+            trainable_params += params
+        total_params += params
+    return total_params, trainable_params

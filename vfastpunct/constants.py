@@ -1,6 +1,7 @@
 from vfastpunct.log import init_logger
-from vfastpunct.models import PuncBertLstmCrf, PuncCapBertLstmCrf, PuncCapBertConfig
-from transformers import AutoConfig
+from vfastpunct.models import (PuncCapLstmConfig, PuncCapBiLstm, PuncCapBiLstmCrf,
+                               PuncCapBertConfig, PuncCapBert, PuncCapBertLstmCrf)
+
 
 LOGGER = init_logger()
 EOS_MARKS = ["PERIOD", "QMARK", "EXCLAM"]
@@ -38,15 +39,22 @@ STRPUNC_MAPPING = {
     '...': 'ELLIPSIS'
 }
 
-MODEL_MAPPING = {
-    'mBertLstmCrf': (PuncBertLstmCrf,
-                     AutoConfig,
-                     'bert-base-multilingual-cased',
-                     '/tmp/bertlstmcrf.pt',
-                     '17Ru3-tA98jcuV64rchf_zpfUj2K-TuZg'),
-    'mBertLstmCrf_PuncCap': (PuncCapBertLstmCrf,
-                             PuncCapBertConfig,
-                             'bert-base-multilingual-cased',
-                             './backup_model.pt',
-                             '')
+PUNCCAP_MODEL_MAPPING = {
+    'lstm_crf': {
+        'model_clss': PuncCapBiLstmCrf,
+        'config_clss': PuncCapLstmConfig
+    },
+    'lstm_softmax': {
+        'model_clss': PuncCapBiLstm,
+        'config_clss': PuncCapLstmConfig
+    },
+    'bert_crf': {
+        'model_clss': PuncCapBertLstmCrf,
+        'config_clss': PuncCapBertConfig
+    },
+    'bert_softmax': {
+        'model_clss': PuncCapBert,
+        'config_clss': PuncCapBertConfig
+    }
 }
+

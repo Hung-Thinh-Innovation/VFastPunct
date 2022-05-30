@@ -17,30 +17,38 @@ class PuncCapLstmConfig(BertConfig):
         self.num_clabels = num_clabels
 
 
-class PuncCapBiLstmSoftmax(nn.Module):
+class PuncCapBiLstmBase(nn.Module):
     def __init__(self, config):
-        super(PuncCapBiLstmSoftmax, self).__init__()
+        super().__init__()
         self.num_plabels = config.num_plabels
         self.num_clabels = config.num_clabels
         self.embeddings = BertEmbeddings(config)
         self.bilstm = nn.LSTM(input_size=config.hidden_size,
-                            hidden_size=config.hidden_size // 2,
-                            num_layers=2,
-                            batch_first=True,
-                            bidirectional=True)
+                              hidden_size=config.hidden_size // 2,
+                              num_layers=2,
+                              batch_first=True,
+                              bidirectional=True)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
         self.p_classifier = nn.Linear(config.hidden_size, config.num_plabels)
         self.c_classifier = nn.Linear(config.hidden_size, config.num_clabels)
-        self.loss_func = nn.CrossEntropyLoss()
 
     @classmethod
     def from_pretrained(cls, model_name: str, config: PuncCapLstmConfig, from_tf: bool = False):
         model = cls(config)
         model.embeddings = BertModel.from_pretrained(model_name, config=config).embeddings
         return model
+
+    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None):
+        return None
+
+
+class PuncCapBiLstm(PuncCapBiLstmBase):
+    def __init__(self, config):
+        super(PuncCapBiLstm, self).__init__(config)
+        self.loss_func = nn.CrossEntropyLoss()
 
     def forward(self,
                 input_ids,
@@ -74,29 +82,11 @@ class PuncCapBiLstmSoftmax(nn.Module):
             return seq_ptags, seq_ctags
 
 
-class PuncCapBiLstmCrf(nn.Module):
+class PuncCapBiLstmCrf(PuncCapBiLstmBase):
     def __init__(self, config):
-        super(PuncCapBiLstmCrf, self).__init__()
-        self.embeddings = BertEmbeddings(config)
-        self.bilstm = nn.LSTM(input_size=config.hidden_size,
-                            hidden_size=config.hidden_size // 2,
-                            num_layers=2,
-                            batch_first=True,
-                            bidirectional=True)
-        classifier_dropout = (
-            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
-        )
-        self.dropout = nn.Dropout(classifier_dropout)
-        self.p_classifier = nn.Linear(config.hidden_size, config.num_plabels)
-        self.c_classifier = nn.Linear(config.hidden_size, config.num_clabels)
-        self.p_crf = CRF(config.num_plabels, batch_first=True)
-        self.c_crf = CRF(config.num_clabels, batch_first=True)
-
-    @classmethod
-    def from_pretrained(cls, model_name: str, config: PuncCapLstmConfig, from_tf: bool = False):
-        model = cls(config)
-        model.embeddings = BertModel.from_pretrained(model_name, config=config).embeddings
-        return model
+        super(PuncCapBiLstmCrf, self).__init__(config)
+        self.p_crf = CRF(self.num_plabels, batch_first=True)
+        self.c_crf = CRF(self.num_clabels, batch_first=True)
 
     def forward(self,
                 input_ids,

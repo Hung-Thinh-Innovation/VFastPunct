@@ -22,6 +22,8 @@ def get_train_argument():
     parser = ArgumentParser()
     parser.add_argument('type', choices=['train', 'test'],
                         help='What processs to be run')
+    parser.add_argument("--task", default='vipunccap', type=str,
+                        help="Training task selected in the list: vipunc, vipunccap.")
     parser.add_argument("--data_dir", default='datasets/News', type=str,
                         help="The input data dir. Should contain the .csv files (or other data files) for the task.")
     parser.add_argument("--overwrite_data", action='store_true',
@@ -29,15 +31,14 @@ def get_train_argument():
     parser.add_argument("--model_name_or_path", default='bert-base-multilingual-cased', type=str,
                         help="Pre-trained model selected in the list: bert-base-uncased, bert-base-cased...")
     parser.add_argument("--model_arch", default='lstm_crf', type=str,
-                        help="Punctuation prediction model architecture selected in the list: original, lstm_softmax, crf, lstm_crf.")
+                        help="Punctuation prediction model architecture selected in the list: lstm_softmax, lstm_crf, "
+                             "bert_crf, bert_softmax.")
     parser.add_argument("--output_dir", default='outputs/', type=str,
                         help="The output directory where the model predictions and checkpoints will be written.")
     parser.add_argument("--max_seq_length", default=190, type=int,
                         help="The maximum total input sequence length after WordPiece tokenization. \n"
                              "Sequences longer than this will be truncated, and sequences shorter \n"
                              "than this will be padded.")
-    parser.add_argument("--do_lower_case", action='store_true',
-                        help="Set this flag if you are using an uncased model.")
     parser.add_argument("--train_batch_size", default=32, type=int,
                         help="Total batch size for training.")
     parser.add_argument("--eval_batch_size", default=32, type=int,
