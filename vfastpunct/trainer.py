@@ -13,6 +13,7 @@ from transformers import AutoTokenizer
 from torch.utils.data import DataLoader, RandomSampler
 
 import os
+import gc
 import glob
 import sys
 import time
@@ -168,6 +169,16 @@ def train():
     model.resize_token_embeddings(len(tokenizer))
     model.to(device)
 
+    if args.load_weights is not None:
+        LOGGER.info(f'Load pretrained model weights from "{args.load_weights}"')
+        if device == 'cpu':
+            checkpoint_data = torch.load(args.load_weights, map_location='cpu')
+        else:
+            checkpoint_data = torch.load(args.load_weights)
+        model.load_state_dict(checkpoint_data['model'])
+        del checkpoint_data
+        gc.collect()
+
     no_decay = ['bias', 'LayerNorm.weight']
     param_optimizer = list(model.named_parameters())
     optimizer_grouped_parameters = [
@@ -230,8 +241,9 @@ def train():
                 saved_file = Path(args.output_dir + f"/backup_model.pt")
                 LOGGER.info(f"\t***Opps!!! Over save step, saving to {saved_file}...***")
                 save_model(args, saved_file, model)
-
         tensorboard_writer.add_scalar('TRAIN_RESULT/Loss', train_loss / num_trainset, epoch)
+        del train_dataset
+        gc.collect()
         # Eval
         eval_f1_score = 0.0
         eval_acc = 0.0
@@ -252,6 +264,8 @@ def train():
             tensorboard_writer.add_scalar(f'EVAL_STEP_LOSS/{fname}', evalset_loss, epoch)
             tensorboard_writer.add_scalar(f'EVAL_STEP_ACC/{fname}', evalset_acc, epoch)
             tensorboard_writer.add_scalar(f'EVAL_STEP_F1/{fname}', evalset_f1_score, epoch)
+        del valid_dataset
+        gc.collect()
         tensorboard_writer.add_scalar('EVAL_RESULT/Loss', eval_loss / num_evalset, epoch)
         tensorboard_writer.add_scalar('EVAL_RESULT/Accuracy', eval_acc / num_evalset, epoch)
         tensorboard_writer.add_scalar('EVAL_RESULT/F1-score', eval_f1_score / num_evalset, epoch)

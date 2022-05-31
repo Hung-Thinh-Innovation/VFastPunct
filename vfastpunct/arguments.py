@@ -28,6 +28,8 @@ def get_train_argument():
                         help="The input data dir. Should contain the .csv files (or other data files) for the task.")
     parser.add_argument("--overwrite_data", action='store_true',
                         help="Whether not to overwirte splitted dataset")
+    parser.add_argument("--load_weights", default=None, type=str,
+                        help='Path of pretrained file.')
     parser.add_argument("--model_name_or_path", default='bert-base-multilingual-cased', type=str,
                         help="Pre-trained model selected in the list: bert-base-uncased, bert-base-cased...")
     parser.add_argument("--model_arch", default='lstm_crf', type=str,
