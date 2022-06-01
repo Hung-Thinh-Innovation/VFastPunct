@@ -64,7 +64,7 @@ def get_train_argument():
                         help="Whether not to use CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
-    parser.add_argument('--save_step', type=int, default=10000,
+    parser.add_argument('--save_step', type=int, default=20000,
                         help="")
     parser.add_argument('--scheduler_patience', type=int, default=2,
                         help="Number of epochs with no improvement after which learning rate will be reduced. ")
