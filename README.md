@@ -47,6 +47,6 @@ bash ./train.sh
 
 ## Start Tensorboard
 ```bash
-    tensorboard --logdir runs --host 0.0.0.0 --port=6006
+tensorboard --logdir runs --host 0.0.0.0 --port=6006
 ```
 

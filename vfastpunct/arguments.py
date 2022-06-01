@@ -20,7 +20,7 @@ def get_test_argument():
 
 def get_train_argument():
     parser = ArgumentParser()
-    parser.add_argument('type', choices=['train', 'test'], required=True,
+    parser.add_argument('type', choices=['train', 'test'],
                         help='What process to be run')
     parser.add_argument("--task", default='vipunccap', type=str,
                         help="Training task selected in the list: vipunc, vipunccap.")

@@ -44,30 +44,57 @@ def save_model(args, saved_file, model):
     torch.save(saved_data, saved_file)
 
 
-def validate(model, valid_iterator, scheduler=None, is_test=False):
+def validate(args,
+             cur_epoch: int,
+             model,
+             tokenizer,
+             device: str = 'cpu',
+             use_crf: bool = False,
+             is_test=False,
+             tb_writer=None):
     start_time = time.time()
     model.eval()
-    eval_loss, nb_eval_steps = 0.0, 0.0
-    eval_ploss, eval_closs = 0.0, 0.0
-    eval_ppreds, eval_plabels = [], []
-    eval_cpreds, eval_clabels = [], []
-    for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), position=0, leave=True):
-        loss, ploss, closs, eval_plogits, eval_clogits = model(**batch)
-        eval_loss += loss.item()
-        eval_ploss += ploss.item()
-        eval_closs += closs.item()
-        nb_eval_steps += 1
-        active_accuracy = batch['label_masks'].view(-1) != 0
-        plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
-        clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
-        eval_plabels.extend(plabels.cpu().tolist())
-        eval_clabels.extend(clabels.cpu().tolist())
-        if isinstance(eval_plogits[-1], list):
-            eval_ppreds.extend(list(itertools.chain(*eval_plogits)))
-            eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
-        else:
-            eval_ppreds.extend(eval_plogits)
-            eval_cpreds.extend(eval_clogits)
+    eval_loss, eval_ploss, eval_closs, nb_eval_steps = 0.0, 0.0, 0.0, 0
+    eval_ppreds, eval_plabels, eval_cpreds, eval_clabels = [], [], [], []
+    for fname, valid_dataset in get_datasets(args.data_dir,
+                                            tokenizer,
+                                            dtype='test',
+                                            max_seq_length=args.max_seq_length,
+                                            device=device,
+                                            use_crf=use_crf):
+        step_loss, step_ploss, step_closs = 0.0, 0.0, 0.0
+        valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
+        # Run one step on sub-dataset
+        for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), position=0, leave=True):
+            loss, ploss, closs, eval_plogits, eval_clogits = model(**batch)
+            step_loss += loss.item()
+            step_ploss += ploss.item()
+            step_closs += closs.item()
+            nb_eval_steps += 1
+            active_accuracy = batch['label_masks'].view(-1) != 0
+            plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
+            clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
+            eval_plabels.extend(plabels.cpu().tolist())
+            eval_clabels.extend(clabels.cpu().tolist())
+            if isinstance(eval_plogits[-1], list):
+                eval_ppreds.extend(list(itertools.chain(*eval_plogits)))
+                eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
+            else:
+                eval_ppreds.extend(eval_plogits)
+                eval_cpreds.extend(eval_clogits)
+
+        eval_loss += step_loss
+        eval_ploss += step_ploss
+        eval_closs += step_closs
+        if tb_writer is not None:
+            preports = classification_report(eval_plabels, eval_ppreds, output_dict=True, zero_division=0)
+            creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
+            step_avg_f1 = (preports['macro avg']['f1-score'] + creports['macro avg']['f1-score']) / 2
+            step_avg_acc = (preports['accuracy'] + creports['accuracy']) / 2
+            tb_writer.add_scalar(f'EVAL_STEP_LOSS/{fname}', (step_loss / len(valid_iterator)), cur_epoch)
+            tb_writer.add_scalar(f'EVAL_STEP_ACC/{fname}', step_avg_acc,cur_epoch)
+            tb_writer.add_scalar(f'EVAL_STEP_F1/{fname}', step_avg_f1, cur_epoch)
+
     epoch_loss = eval_loss / nb_eval_steps
     epoch_ploss = eval_ploss / nb_eval_steps
     epoch_closs = eval_closs / nb_eval_steps
@@ -83,36 +110,61 @@ def validate(model, valid_iterator, scheduler=None, is_test=False):
     else:
         preports = classification_report(eval_plabels, eval_ppreds, output_dict=True, zero_division=0)
         creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
-        macro_avg = (preports['macro avg']['f1-score'] + creports['macro avg']['f1-score']) / 2
-        acc_avg = (preports['accuracy'] + creports['accuracy']) / 2
-        if scheduler is not None:
-            scheduler.step(macro_avg)
-        LOGGER.info(f"{'*' * 10}Validate Summary{'*' * 10}")
-        LOGGER.info(f"\tValidation Loss: {eval_loss} (pLoss: {epoch_ploss:.4f}; cLoss: {epoch_closs:.4f});\n"
-                    f"\tAccuracy: {acc_avg:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {creports['accuracy']:.4f});\n"
-                    f"\tMacro-F1 score: {macro_avg:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {creports['macro avg']['f1-score']:.4f});\n"
+        epoch_avg_f1 = (preports['macro avg']['f1-score'] + creports['macro avg']['f1-score']) / 2
+        epoch_avg_acc = (preports['accuracy'] + creports['accuracy']) / 2
+        LOGGER.info(f"{'*' * 20}Validate Summary{'*' * 20}")
+        LOGGER.info(f"\tValidation Loss: {epoch_loss} (pLoss: {epoch_ploss:.4f}; cLoss: {epoch_closs:.4f});\n"
+                    f"\tAccuracy: {epoch_avg_acc:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {creports['accuracy']:.4f});\n"
+                    f"\tMacro-F1 score: {epoch_avg_f1:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {creports['macro avg']['f1-score']:.4f});\n"
                     f"\tSpend time: {time.time() - start_time}")
-        eval_ppreds, eval_plabels = None, None
-        eval_cpreds, eval_clabels = None, None
-        return epoch_loss, acc_avg, macro_avg
+        eval_ppreds, eval_plabel, eval_cpreds, eval_clabels = None, None, None, None
+        return epoch_loss, epoch_avg_acc, epoch_avg_f1
 
 
-def train_one_epoch(model, optimizer, train_iterator, max_grad_norm: float = 1.0):
+def train_one_epoch(args,
+                    cur_epoch: int,
+                    model,
+                    optim,
+                    tokenizer,
+                    max_grad_norm: float = 1.0,
+                    device: str = 'cpu',
+                    use_crf: bool= False,
+                    tb_writer=None):
     start_time = time.time()
     tr_loss, nb_tr_steps = 0.0, 0.0
     model.train()
-    for idx, batch in tqdm(enumerate(train_iterator), total=len(train_iterator), position=0, leave=True):
-        loss, _, _, _, _ = model(**batch)
-        tr_loss += loss.item()
-        nb_tr_steps += 1
-        torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
-        # backward pass
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    for fname, train_dataset in get_datasets(args.data_dir,
+                                             tokenizer,
+                                             max_seq_length=args.max_seq_length,
+                                             device=device,
+                                             use_crf=use_crf):
+        train_sampler = RandomSampler(train_dataset)
+        train_iterator = DataLoader(train_dataset,
+                                    sampler=train_sampler,
+                                    batch_size=args.train_batch_size,
+                                    num_workers=0)
+        step_loss = 0.0
+        for idx, batch in tqdm(enumerate(train_iterator), total=len(train_iterator), position=0, leave=True):
+            loss, _, _, _, _ = model(**batch)
+            tr_loss += loss.item()
+            step_loss += loss.item()
+            nb_tr_steps += 1
+            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
+            # backward pass
+            optim.zero_grad()
+            loss.backward()
+            optim.step()
+            # Save checkpoint to backup model
+            if nb_tr_steps % args.save_step == 0:
+                saved_file = Path(args.output_dir + f"/backup_model.pt")
+                LOGGER.info(f"\t***Opps!!! Over save step, saving to {saved_file}...***")
+                save_model(args, saved_file, model)
+        if tb_writer is not None:
+            tb_writer.add_scalar(f'TRAIN_STEP/{fname}', step_loss, cur_epoch)
     epoch_loss = tr_loss / nb_tr_steps
+    LOGGER.info(f"{'*' * 20}Train Summary{'*' * 20}")
     LOGGER.info(
-        f"\tTraining Lr: {optimizer.param_groups[0]['lr']}; Loss: {epoch_loss}; Spend time: {time.time() - start_time}")
+        f"\tTraining Lr: {optim.param_groups[0]['lr']}; Loss: {epoch_loss}; Spend time: {time.time() - start_time}")
     return epoch_loss
 
 
@@ -146,6 +198,7 @@ def test():
     model.load_state_dict(checkpoint_data['model'])
     model.to(device)
     validate(model, test_iterator, is_test=True)
+
 
 def train():
     args = get_train_argument()
@@ -220,68 +273,41 @@ def train():
         if cumulative_early_steps > args.early_stop:
             LOGGER.info(f"Hey!!! Early stopping. Check your saved model.")
         LOGGER.info(f"\n{'=' * 30}Training epoch {epoch}{'=' * 30}")
-        # Train
-        train_loss = 0
-        num_trainset = 0
-        for fname, train_dataset in get_datasets(args.data_dir,
-                                                 tokenizer,
-                                                 max_seq_length=args.max_seq_length,
-                                                 device=device,
-                                                 use_crf=use_crf):
-            train_sampler = RandomSampler(train_dataset)
-            train_iterator = DataLoader(train_dataset,
-                                        sampler=train_sampler,
-                                        batch_size=args.train_batch_size,
-                                        num_workers=0)
-            trained_step += len(train_iterator)
-            trainset_loss = train_one_epoch(model, optimizer, train_iterator, max_grad_norm=args.max_grad_norm)
-            train_loss += trainset_loss
-            num_trainset += 1
-            train_dataset = None
-            tensorboard_writer.add_scalar(f'TRAIN_STEP/{fname}', trainset_loss, epoch)
-            # Save checkpoint every train set to backup model
-            if trained_step % args.save_step == 0:
-                saved_file = Path(args.output_dir + f"/backup_model.pt")
-                LOGGER.info(f"\t***Opps!!! Over save step, saving to {saved_file}...***")
-                save_model(args, saved_file, model)
-        tensorboard_writer.add_scalar('TRAIN_RESULT/Loss', train_loss / num_trainset, epoch)
-        del train_dataset
+        # Fit model with dataset
+        train_loss = train_one_epoch(args,
+                                     cur_epoch=epoch,
+                                     model=model,
+                                     optim=optimizer,
+                                     tokenizer=tokenizer,
+                                     max_grad_norm=args.max_grad_norm,
+                                     device=device,
+                                     use_crf=use_crf,
+                                     tb_writer=tensorboard_writer)
+        tensorboard_writer.add_scalar('TRAIN_RESULT/Loss', train_loss, epoch)
         gc.collect()
         # Eval
-        eval_f1_score = 0.0
-        eval_acc = 0.0
-        eval_loss = 0
-        num_evalset = 0
-        for fname, valid_dataset in get_datasets(args.data_dir,
-                                                 tokenizer,
-                                                 dtype='test',
-                                                 max_seq_length=args.max_seq_length,
-                                                 device=device,
-                                                 use_crf=use_crf):
-            valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
-            evalset_loss, evalset_acc, evalset_f1_score = validate(model, valid_iterator, scheduler)
-            eval_loss += evalset_loss
-            eval_acc += evalset_acc
-            eval_f1_score += evalset_f1_score
-            num_evalset += 1
-            valid_dataset = None
-            tensorboard_writer.add_scalar(f'EVAL_STEP_LOSS/{fname}', evalset_loss, epoch)
-            tensorboard_writer.add_scalar(f'EVAL_STEP_ACC/{fname}', evalset_acc, epoch)
-            tensorboard_writer.add_scalar(f'EVAL_STEP_F1/{fname}', evalset_f1_score, epoch)
-        del valid_dataset
-        gc.collect()
-        tensorboard_writer.add_scalar('EVAL_RESULT/Loss', eval_loss / num_evalset, epoch)
-        tensorboard_writer.add_scalar('EVAL_RESULT/Accuracy', eval_acc / num_evalset, epoch)
-        tensorboard_writer.add_scalar('EVAL_RESULT/F1-score', eval_f1_score / num_evalset, epoch)
-        LOGGER.info(f"\tEpoch F1 score = {eval_f1_score} ; Best score = {best_score}")
-        if eval_f1_score > best_score:
-            best_score = eval_f1_score
+        eval_loss, eval_acc, eval_f1 = validate(args,
+                                                cur_epoch=epoch,
+                                                model=model,
+                                                tokenizer=tokenizer,
+                                                device=device,
+                                                use_crf=use_crf,
+                                                tb_writer=tensorboard_writer)
+        if scheduler is not None:
+            scheduler.step(eval_f1)
+        tensorboard_writer.add_scalar('EVAL_RESULT/Loss', eval_loss, epoch)
+        tensorboard_writer.add_scalar('EVAL_RESULT/Accuracy', eval_acc, epoch)
+        tensorboard_writer.add_scalar('EVAL_RESULT/F1-score', eval_f1, epoch)
+        LOGGER.info(f"\tEpoch F1 score = {eval_f1} ; Best score = {best_score}")
+        if eval_f1 > best_score:
+            best_score = eval_f1
             saved_file = Path(args.output_dir + f"/best_model.pt")
             LOGGER.info(f"\t***Oh yeah!!! New best model, saving to {saved_file}...***")
             save_model(args, saved_file, model)
             cumulative_early_steps = 0
         else:
             cumulative_early_steps += 1
+        gc.collect()
 
 
 if __name__ == "__main__":
