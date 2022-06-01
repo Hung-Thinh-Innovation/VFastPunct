@@ -91,6 +91,8 @@ def validate(model, valid_iterator, scheduler=None, is_test=False):
                     f"\tAccuracy: {acc_avg:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {creports['accuracy']:.4f});\n"
                     f"\tMacro-F1 score: {macro_avg:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {creports['macro avg']['f1-score']:.4f});\n"
                     f"\tSpend time: {time.time() - start_time}")
+        eval_ppreds, eval_plabels = None, None
+        eval_cpreds, eval_clabels = None, None
         return epoch_loss, acc_avg, macro_avg
 
 
@@ -235,6 +237,7 @@ def train():
             trainset_loss = train_one_epoch(model, optimizer, train_iterator, max_grad_norm=args.max_grad_norm)
             train_loss += trainset_loss
             num_trainset += 1
+            train_dataset = None
             tensorboard_writer.add_scalar(f'TRAIN_STEP/{fname}', trainset_loss, epoch)
             # Save checkpoint every train set to backup model
             if trained_step % args.save_step == 0:
@@ -261,6 +264,7 @@ def train():
             eval_acc += evalset_acc
             eval_f1_score += evalset_f1_score
             num_evalset += 1
+            valid_dataset = None
             tensorboard_writer.add_scalar(f'EVAL_STEP_LOSS/{fname}', evalset_loss, epoch)
             tensorboard_writer.add_scalar(f'EVAL_STEP_ACC/{fname}', evalset_acc, epoch)
             tensorboard_writer.add_scalar(f'EVAL_STEP_F1/{fname}', evalset_f1_score, epoch)
