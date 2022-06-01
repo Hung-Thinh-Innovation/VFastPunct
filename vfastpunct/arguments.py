@@ -20,8 +20,8 @@ def get_test_argument():
 
 def get_train_argument():
     parser = ArgumentParser()
-    parser.add_argument('type', choices=['train', 'test'],
-                        help='What processs to be run')
+    parser.add_argument('type', choices=['train', 'test'], required=True,
+                        help='What process to be run')
     parser.add_argument("--task", default='vipunccap', type=str,
                         help="Training task selected in the list: vipunc, vipunccap.")
     parser.add_argument("--data_dir", default='datasets/News', type=str,
@@ -59,15 +59,15 @@ def get_train_argument():
     parser.add_argument("--max_grad_norm", default=1.0, type=float,
                         help="Max gradient norm.")
     parser.add_argument("--early_stop", default=10.0, type=float,
-                        help="Max gradient norm.")
+                        help="")
     parser.add_argument("--no_cuda", action='store_true',
                         help="Whether not to use CUDA when available")
-    parser.add_argument("--local_rank", type=int, default=-1,
-                        help="local_rank for distributed training on gpus")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
     parser.add_argument('--save_step', type=int, default=10000,
                         help="")
+    parser.add_argument('--scheduler_patience', type=int, default=2,
+                        help="Number of epochs with no improvement after which learning rate will be reduced. ")
     parser.add_argument('--gradient_accumulation_steps', type=int, default=1,
                         help="Number of updates steps to accumulate before performing a backward/update pass.")
     return parser.parse_args()

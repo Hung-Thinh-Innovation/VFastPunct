@@ -11,6 +11,7 @@ from tensorboardX import SummaryWriter
 from sklearn.metrics import classification_report
 from transformers import AutoTokenizer
 from torch.utils.data import DataLoader, RandomSampler
+from memory_profiler import profile
 
 import os
 import gc
@@ -146,7 +147,6 @@ def test():
     model.to(device)
     validate(model, test_iterator, is_test=True)
 
-
 def train():
     args = get_train_argument()
     use_crf = True if 'crf' in args.model_arch else False
@@ -189,7 +189,7 @@ def train():
         {'params': [p for n, p in param_optimizer if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=5)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=args.scheduler_patience)
 
     # Trainer Summary
     total_params, trainable_param = get_total_model_parameters(model)
