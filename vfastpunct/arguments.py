@@ -64,6 +64,8 @@ def get_train_argument():
                         help="Whether not to use CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
+    parser.add_argument('--num_worker', type=int, default=2,
+                        help="How many subprocesses to use for data loading. 0 means that the data will be loaded in the main process.")
     parser.add_argument('--save_step', type=int, default=20000,
                         help="")
     parser.add_argument('--scheduler_patience', type=int, default=2,

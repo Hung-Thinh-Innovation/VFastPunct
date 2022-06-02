@@ -1,6 +1,6 @@
 from vfastpunct.arguments import get_train_argument, get_test_argument
 from vfastpunct.constants import LOGGER, PUNCCAP_MODEL_MAPPING, PUNC_LABEL2ID, CAP_LABEL2ID
-from vfastpunct.datasets import build_dataset, build_punccap_dataset
+from vfastpunct.datasets import build_dataset, build_punccap_dataset, build_punctcap_dataset
 from vfastpunct.ultis import get_total_model_parameters
 
 from typing import Union, Generator
@@ -31,8 +31,13 @@ def get_datasets(ddir: Union[str, os.PathLike],
     for fpath in glob.glob(str(Path(ddir + f'/{dtype}_*_splitted.txt'))):
         LOGGER.info(f"Load file {fpath}")
         fname = os.path.basename(fpath)
-        yield fname, \
-              build_punccap_dataset(fpath, tokenizer, max_seq_length=max_seq_length, device=device, use_crf=use_crf)
+        punccap_dataset = build_punctcap_dataset(fpath,
+                                                tokenizer,
+                                                max_seq_length=max_seq_length,
+                                                device=device,
+                                                use_crf=use_crf)
+        yield fname, punccap_dataset
+
 
 def save_model(args, saved_file, model):
     saved_data = {

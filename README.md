@@ -35,6 +35,7 @@ bash ./train.sh
 > + ***early_stop*** (`float`, `*optional`): Number of early stop step. Default=10.0.
 > + ***no_cuda*** (`bool`, `*optional`): Whether not to use CUDA when available. Default=False.
 > + ***seed*** (`bool`, `*optional`): Random seed for initialization. Default=42.
+> + ***num_worker*** (`int`, `*optional`): how many subprocesses to use for data loading. 0 means that the data will be loaded in the main process. Default=2.
 > + ***save_step*** (`int`, `*optional`): The number of steps in the model will be saved. Default=10000.
 > + ***scheduler_patience*** (`int`, `*optional`): Number of epochs with no improvement after which learning rate will be reduced. Default=2.
 > + ***gradient_accumulation_steps*** (`int`, `*optional`): Number of updates steps to accumulate before performing a backward/update pass. Default=1.
