@@ -28,7 +28,8 @@ def get_datasets(ddir: Union[str, os.PathLike],
                  max_seq_length: int = 190,
                  device: str = 'cpu',
                  use_crf: bool = True) -> Generator:
-    for fpath in glob.glob(str(Path(ddir + f'/{dtype}_*_splitted.txt'))):
+    data_files = glob.glob(str(Path(ddir + f'/{dtype}_*_splitted.txt')))
+    for fpath in data_files:
         LOGGER.info(f"Load file {fpath}")
         fname = os.path.basename(fpath)
         punccap_dataset = build_punctcap_dataset(fpath,
@@ -36,7 +37,7 @@ def get_datasets(ddir: Union[str, os.PathLike],
                                                 max_seq_length=max_seq_length,
                                                 device=device,
                                                 use_crf=use_crf)
-        yield fname, punccap_dataset
+        yield len(data_files), fname, punccap_dataset
 
 
 def save_model(args, saved_file, model):
@@ -61,16 +62,18 @@ def validate(args,
     model.eval()
     eval_loss, eval_ploss, eval_closs, nb_eval_steps = 0.0, 0.0, 0.0, 0
     eval_ppreds, eval_plabels, eval_cpreds, eval_clabels = [], [], [], []
-    for fname, valid_dataset in get_datasets(args.data_dir,
+    evaled_sets = 0
+    for num_of_sets, fname, valid_dataset in get_datasets(args.data_dir,
                                             tokenizer,
                                             dtype='test',
                                             max_seq_length=args.max_seq_length,
                                             device=device,
                                             use_crf=use_crf):
         step_loss, step_ploss, step_closs = 0.0, 0.0, 0.0
+        evaled_sets += 1
         valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
         # Run one step on sub-dataset
-        for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), position=0, leave=True):
+        for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), desc=f'[EVAL]Epoch {cur_epoch}/{args.epochs}; Sub-dataset{evaled_sets}/{num_of_sets}', position=0, leave=True):
             loss, ploss, closs, eval_plogits, eval_clogits = model(**batch)
             step_loss += loss.item()
             step_ploss += ploss.item()
@@ -117,8 +120,8 @@ def validate(args,
         creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
         epoch_avg_f1 = (preports['macro avg']['f1-score'] + creports['macro avg']['f1-score']) / 2
         epoch_avg_acc = (preports['accuracy'] + creports['accuracy']) / 2
-        LOGGER.info(f"{'*' * 20}Validate Summary{'*' * 20}")
-        LOGGER.info(f"\tValidation Loss: {epoch_loss} (pLoss: {epoch_ploss:.4f}; cLoss: {epoch_closs:.4f});\n"
+        LOGGER.info(f"\t{'*' * 20}Validate Summary{'*' * 20}")
+        LOGGER.info(f"\tValidation Loss: {epoch_loss:.4f} (pLoss: {epoch_ploss:.4f}; cLoss: {epoch_closs:.4f});\n"
                     f"\tAccuracy: {epoch_avg_acc:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {creports['accuracy']:.4f});\n"
                     f"\tMacro-F1 score: {epoch_avg_f1:.4f} (pF1: {preports['macro avg']['f1-score']:.4f}; cF1: {creports['macro avg']['f1-score']:.4f});\n"
                     f"\tSpend time: {time.time() - start_time}")
@@ -138,7 +141,8 @@ def train_one_epoch(args,
     start_time = time.time()
     tr_loss, nb_tr_steps = 0.0, 0.0
     model.train()
-    for fname, train_dataset in get_datasets(args.data_dir,
+    trained_set = 0
+    for num_of_sets, fname, train_dataset in get_datasets(args.data_dir,
                                              tokenizer,
                                              max_seq_length=args.max_seq_length,
                                              device=device,
@@ -149,7 +153,8 @@ def train_one_epoch(args,
                                     batch_size=args.train_batch_size,
                                     num_workers=0)
         step_loss = 0.0
-        for idx, batch in tqdm(enumerate(train_iterator), total=len(train_iterator), position=0, leave=True):
+        trained_set += 1
+        for idx, batch in tqdm(enumerate(train_iterator), total=len(train_iterator), desc=f'[TRAIN]Epoch {cur_epoch}/{args.epochs}; Sub-dataset {trained_set}/{num_of_sets}', position=0, leave=True):
             loss, _, _, _, _ = model(**batch)
             tr_loss += loss.item()
             step_loss += loss.item()
@@ -167,9 +172,9 @@ def train_one_epoch(args,
         if tb_writer is not None:
             tb_writer.add_scalar(f'TRAIN_STEP/{fname}', step_loss, cur_epoch)
     epoch_loss = tr_loss / nb_tr_steps
-    LOGGER.info(f"{'*' * 20}Train Summary{'*' * 20}")
+    LOGGER.info(f"\t{'*' * 20}Train Summary{'*' * 20}")
     LOGGER.info(
-        f"\tTraining Lr: {optim.param_groups[0]['lr']}; Loss: {epoch_loss}; Spend time: {time.time() - start_time}")
+        f"\tTraining Lr: {optim.param_groups[0]['lr']}; Loss: {epoch_loss:.4f}; Spend time: {time.time() - start_time}")
     return epoch_loss
 
 

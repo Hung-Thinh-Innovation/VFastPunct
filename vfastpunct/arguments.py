@@ -47,7 +47,7 @@ def get_train_argument():
                         help="Total batch size for eval.")
     parser.add_argument("--learning_rate", default=5e-5, type=float,
                         help="The initial learning rate for Adam.")
-    parser.add_argument("--epochs", default=100.0, type=float,
+    parser.add_argument("--epochs", default=100, type=int,
                         help="Total number of training epochs to perform.")
     parser.add_argument("--warmup_proportion", default=0.1, type=float,
                         help="Proportion of training to perform linear learning rate warmup for. "

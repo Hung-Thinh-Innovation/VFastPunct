@@ -233,7 +233,6 @@ def build_punctcap_dataset(dfile: Union[str, os.PathLike],
                           device: str = 'cpu',
                           use_crf: bool = False):
     dfile = Path(dfile)
-    LOGGER.info("Creating features from dataset file at %s", dfile)
     data_df = pd.read_csv(dfile)
     punctcap_dataset = PunctCapDataset(data_df,
                                        device=device,
