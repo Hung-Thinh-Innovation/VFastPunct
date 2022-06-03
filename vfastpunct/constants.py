@@ -60,3 +60,24 @@ PUNCCAP_MODEL_MAPPING = {
     }
 }
 
+DATA_SOURCES = {
+    "train_016_splitted.txt": '1sdX1WIXo0uIEg7ZT5PqloJgrIbE8ulOC',
+    "train_015_splitted.txt": '1WQupNn0tRPdAKu3jBP9CEaXNx8fqWART',
+    "train_014_splitted.txt": '1FEyk15PGOX-Ue3qdgV0LRBYOnxbBe9GQ',
+    "train_013_splitted.txt": '1q5CZPoOeOSS6sa78zCs0L1thQNhxxkfn',
+    "train_012_splitted.txt": '1NIXqZai3KtdgPqk2cciUOVq9dIlmBFuj',
+    "train_011_splitted.txt": '1Hz5pULnsLwgXe-mDnstVBreE5fh8rFIj',
+    "train_010_splitted.txt": '1YOnoxs1otSh678nTNfhwOJOef7oBXzgW',
+    "train_009_splitted.txt": '1HfxUYJ7g1QjIX6tA3yiSNrSJ2DIRc4LF',
+    "train_008_splitted.txt": '1_SD5RQ-_OYVCR9W_Sdo-q_xXekRcWk7g',
+    "train_007_splitted.txt": '1IR1OvKi3wFe2YmzjPkO0oCrXXIpeUxON',
+    "train_006_splitted.txt": '1P86W3ZdkgK-occt1k8QwBOjwf0CxD5_q',
+    "train_005_splitted.txt": '1YlfkusvoKfswnPyZyIVHC7I1xXdvBnXo',
+    "train_004_splitted.txt": '1QryziNLPTma2q_Hf9PIjiQltT_akZXSf',
+    "train_003_splitted.txt": '1XtaioCuKX-w2fvSWGkjNAnbHlsNeYdDu',
+    "train_002_splitted.txt": '16GSQEN2HhnMUxx3cYfg52VrKGzxs9YdW',
+    "train_001_splitted.txt": '1mjMdIxt6xa3ayfdAexR_PjeQprH8Zn5q',
+    "train_000_splitted.txt": '1jSTjRwPMbvy8SDcEy_fHQqtkz8fiZtaR',
+    "test_000_splitted.txt": '1bUGX-PxJ2pI-Ov9UGVii8PrYuxDW3aNH',
+}
+

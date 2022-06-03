@@ -1,7 +1,7 @@
-from vfastpunct.arguments import get_train_argument, get_test_argument
+from vfastpunct.arguments import get_train_argument, get_test_argument, get_download_argument
 from vfastpunct.constants import LOGGER, PUNCCAP_MODEL_MAPPING, PUNC_LABEL2ID, CAP_LABEL2ID
 from vfastpunct.datasets import build_dataset, build_punccap_dataset, build_punctcap_dataset
-from vfastpunct.ultis import get_total_model_parameters
+from vfastpunct.ultis import get_total_model_parameters, download_dataset_from_drive
 
 from typing import Union, Generator
 from tqdm import tqdm
@@ -11,7 +11,6 @@ from tensorboardX import SummaryWriter
 from sklearn.metrics import classification_report
 from transformers import AutoTokenizer
 from torch.utils.data import DataLoader, RandomSampler
-from memory_profiler import profile
 
 import os
 import gc
@@ -320,6 +319,11 @@ def train():
         gc.collect()
 
 
+def download():
+    args = get_download_argument()
+    download_dataset_from_drive(args.data_dir)
+
+
 if __name__ == "__main__":
     if sys.argv[1] == 'train':
         LOGGER.info("Start TRAIN process... go go go!!!")
@@ -327,6 +331,9 @@ if __name__ == "__main__":
     elif sys.argv[1] == 'test':
         LOGGER.info("Start TEST process... go go go!!!")
         test()
+    elif sys.argv[1] == 'download':
+        LOGGER.info("Start Download process... go go go!!!")
+        download()
     else:
         LOGGER.error(
             f'[ERROR] - `{sys.argv[1]}` Are you kidding me? I only know `train` or `test`. Please read the README!!!!')

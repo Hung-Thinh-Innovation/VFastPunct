@@ -1,9 +1,19 @@
 from argparse import ArgumentParser
 
 
+def get_download_argument():
+    parser = ArgumentParser()
+
+    parser.add_argument('type', choices=['train', 'test', 'download'],
+                        help='What processs to be run')
+    parser.add_argument("--data_dir", default='datasets/', type=str,
+                        help="The input data dir. The dir to saved downloaded file.")
+    return parser.parse_args()
+
+
 def get_test_argument():
     parser = ArgumentParser()
-    parser.add_argument('type', choices=['train', 'test'],
+    parser.add_argument('type', choices=['train', 'test', 'download'],
                         help='What processs to be run')
     parser.add_argument("--data_dir", default='datasets/News', type=str,
                         help="The input data dir. Should contain the .txt files (or other data files) for the task.")
@@ -20,7 +30,7 @@ def get_test_argument():
 
 def get_train_argument():
     parser = ArgumentParser()
-    parser.add_argument('type', choices=['train', 'test'],
+    parser.add_argument('type', choices=['train', 'test', 'download'],
                         help='What process to be run')
     parser.add_argument("--task", default='vipunccap', type=str,
                         help="Training task selected in the list: vipunc, vipunccap.")

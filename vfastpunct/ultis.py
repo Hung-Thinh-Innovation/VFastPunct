@@ -1,4 +1,6 @@
-from vfastpunct.constants import LOGGER
+import os
+
+from vfastpunct.constants import LOGGER, DATA_SOURCES
 
 import requests
 
@@ -15,7 +17,6 @@ def download_file_from_google_drive(id, destination, confirm=None):
             for chunk in response.iter_content(CHUNK_SIZE):
                 if chunk:  # filter out keep-alive new chunks
                     f.write(chunk)
-    LOGGER.info(f"Download pretrained model..")
     URL = "https://docs.google.com/uc?export=download"
     if confirm is not None:
         URL += f"&confirm={confirm}"
@@ -36,3 +37,10 @@ def get_total_model_parameters(model):
             trainable_params += params
         total_params += params
     return total_params, trainable_params
+
+
+def download_dataset_from_drive(save_dir):
+    for idx, (k, v) in enumerate(DATA_SOURCES.items()):
+        LOGGER.info(f"[{idx}/{len(DATA_SOURCES)}]Download {k} ...")
+        save_path = os.path.join(save_dir, k)
+        download_file_from_google_drive(v, save_path, 't')
