@@ -1,18 +1,21 @@
 from vfastpunct.log import init_logger
-from vfastpunct.models import (PuncCapLstmConfig, PuncCapBiLstm, PuncCapBiLstmCrf,
-                               PuncCapBertConfig, PuncCapBert, PuncCapBertLstmCrf)
-
+from vfastpunct.models import *
 from datetime import datetime
+from string import punctuation
+
+import re
 
 
 LOGGER = init_logger(datetime.now().strftime('%d%b%Y_%H-%M-%S.log'))
 EOS_MARKS = ["PERIOD", "QMARK", "EXCLAM"]
-PUNC_LABEL2ID = ['O', 'PERIOD', 'COMMA', 'COLON', 'QMARK', 'EXCLAM', 'SEMICOLON', 'HYPHEN', 'ELLIPSIS']
-PUNC_ID2LABEL = {idx: label for idx, label in enumerate(PUNC_LABEL2ID)}
+PUNCT_LABEL2ID = ['O', 'PERIOD', 'COMMA', 'COLON', 'QMARK', 'EXCLAM', 'SEMICOLON', 'HYPHEN', 'ELLIPSIS']
+PUNCT_ID2LABEL = {idx: label for idx, label in enumerate(PUNCT_LABEL2ID)}
 CAP_LABEL2ID = ['O', 'U', 'T']
 CAP_ID2LABEL = {idx: label for idx, label in enumerate(CAP_LABEL2ID)}
 
-PUNC_MAPPING = {
+PUNCT_PATTERN = re.compile(f'[{punctuation}]+')
+
+PUNCT_MAPPING = {
     'PERIOD': '.',
     'COMMA': ',',
     'COLON': ':',
@@ -41,22 +44,42 @@ STRPUNC_MAPPING = {
     '...': 'ELLIPSIS'
 }
 
-PUNCCAP_MODEL_MAPPING = {
-    'lstm_crf': {
-        'model_clss': PuncCapBiLstmCrf,
-        'config_clss': PuncCapLstmConfig
+MODEL_MAPPING = {
+    'punct': {
+        'lstm_crf': {
+            'model_clss': None,
+            'config_clss': PunctLstmConfig
+        },
+        'lstm_softmax': {
+            'model_clss': PunctBiLstm,
+            'config_clss': PunctLstmConfig
+        },
+        'bert_crf': {
+            'model_clss': None,
+            'config_clss': None
+        },
+        'bert_softmax': {
+            'model_clss': None,
+            'config_clss': None
+        }
     },
-    'lstm_softmax': {
-        'model_clss': PuncCapBiLstm,
-        'config_clss': PuncCapLstmConfig
-    },
-    'bert_crf': {
-        'model_clss': PuncCapBertLstmCrf,
-        'config_clss': PuncCapBertConfig
-    },
-    'bert_softmax': {
-        'model_clss': PuncCapBert,
-        'config_clss': PuncCapBertConfig
+    'punctcap': {
+        'lstm_crf': {
+            'model_clss': PunctCapBiLstmCrf,
+            'config_clss': PunctCapLstmConfig
+        },
+        'lstm_softmax': {
+            'model_clss': PunctCapBiLstm,
+            'config_clss': PunctCapLstmConfig
+        },
+        'bert_crf': {
+            'model_clss': PuncCapBertLstmCrf,
+            'config_clss': PuncCapBertConfig
+        },
+        'bert_softmax': {
+            'model_clss': PunctCapBert,
+            'config_clss': PuncCapBertConfig
+        }
     }
 }
 

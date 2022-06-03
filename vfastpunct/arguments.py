@@ -11,6 +11,38 @@ def get_download_argument():
     return parser.parse_args()
 
 
+def get_build_dataset_argument():
+    parser = ArgumentParser()
+    parser.add_argument('type', choices=['build', 'split'],
+                        help='What processs to be run')
+    parser.add_argument("--corpus_path", default='datasets/Raw/corpus-full.txt', type=str,
+                        help="The input corpus file path.")
+    parser.add_argument("--split_test", action='store_true', default=False,
+                        help="Whether not to split dataset to train and test set")
+    parser.add_argument("--test_ratio", default=0.2, type=float,
+                        help="It should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the test split")
+    parser.add_argument("--truncate", action='store_true', default=False,
+                        help="Truncate large dataset file to smaller files.")
+    parser.add_argument("--truncate_size", default=150000000, type=int,
+                        help="Maximun number of truncated file.")
+    parser.add_argument("--skip_ratio", default=0.0, type=float,
+                        help="It should be between 0.0 and 1.0 and represent the proportion of skip examples.")
+    return parser.parse_args()
+
+
+def get_split_argument():
+    parser = ArgumentParser()
+
+    parser.add_argument('type', choices=['build', 'split'],
+                        help='What processs to be run')
+    parser.add_argument("--data_dir", default='datasets/', type=str,
+                        help="The input data dir. The dir to saved splited file.")
+    parser.add_argument("--max_len", default=190, type=int,
+                        help="The maximum total input sequence length.")
+
+    return parser.parse_args()
+
+
 def get_test_argument():
     parser = ArgumentParser()
     parser.add_argument('type', choices=['train', 'test', 'download'],
@@ -32,8 +64,8 @@ def get_train_argument():
     parser = ArgumentParser()
     parser.add_argument('type', choices=['train', 'test', 'download'],
                         help='What process to be run')
-    parser.add_argument("--task", default='vipunccap', type=str,
-                        help="Training task selected in the list: vipunc, vipunccap.")
+    parser.add_argument("--task", default='punctcap', type=str,
+                        help="Training task selected in the list: punct, punctcap.")
     parser.add_argument("--data_dir", default='datasets/News', type=str,
                         help="The input data dir. Should contain the .csv files (or other data files) for the task.")
     parser.add_argument("--overwrite_data", action='store_true', default=False,

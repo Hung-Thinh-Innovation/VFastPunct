@@ -15,9 +15,9 @@ class PuncCapBertConfig(BertConfig):
         self.num_clabels = num_clabels
 
 
-class PuncCapBert(BertForTokenClassification):
+class PunctCapBert(BertForTokenClassification):
     def __init__(self, config):
-        super(PuncCapBert, self).__init__()
+        super(PunctCapBert, self).__init__()
         self.num_plabels = config.num_plabels
         self.num_clabels = config.num_clabels
         self.classifier = nn.Linear(config.hidden_size, config.num_plabels)

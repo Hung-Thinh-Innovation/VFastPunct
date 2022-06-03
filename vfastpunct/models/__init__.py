@@ -1,7 +1,9 @@
-from vfastpunct.models.PuncBert import PuncBertLstmCrf
-from vfastpunct.models.PuncCapBert import PuncCapBertLstmCrf, PuncCapBertConfig
-from vfastpunct.models.PuncCapLstm import PuncCapBiLstmCrf, PuncCapLstmConfig, PuncCapBiLstm
+from vfastpunct.models.punct_bert import PuncBertLstmCrf
+from vfastpunct.models.punct_cap_bert import PuncCapBertLstmCrf, PunctCapBert, PuncCapBertConfig
+from vfastpunct.models.punct_cap_lstm import PunctCapBiLstmCrf, PunctCapLstmConfig, PunctCapBiLstm
+from vfastpunct.models.punct_lstm import PunctLstmConfig, PunctBiLstm
 
 __all__ = ['PuncBertLstmCrf',
-           'PuncCapBertConfig', 'PuncCapBertLstmCrf',
-           'PuncCapLstmConfig', 'PuncCapBiLstmCrf', 'PuncCapBiLstm']
+           'PuncCapBertConfig', 'PunctCapBert', 'PuncCapBertLstmCrf',
+           'PunctCapLstmConfig', 'PunctCapBiLstmCrf', 'PunctCapBiLstm',
+           'PunctLstmConfig', 'PunctBiLstm']

@@ -1,3 +1,5 @@
+from vfastpunct.models.base_model import BaseModelOutput
+
 from typing import Optional
 from transformers import logging, BertModel, BertConfig
 from transformers.models.bert.modeling_bert import BertEmbeddings
@@ -10,14 +12,14 @@ import torch.nn.functional as F
 logging.set_verbosity_error()
 
 
-class PuncCapLstmConfig(BertConfig):
+class PunctCapLstmConfig(BertConfig):
     def __init__(self, num_plabels=9, num_clabels=3, **kwargs):
         super().__init__(**kwargs)
         self.num_plabels = num_plabels
         self.num_clabels = num_clabels
 
 
-class PuncCapBiLstmBase(nn.Module):
+class PunctCapBiLstmBase(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.num_plabels = config.num_plabels
@@ -36,7 +38,7 @@ class PuncCapBiLstmBase(nn.Module):
         self.c_classifier = nn.Linear(config.hidden_size, config.num_clabels)
 
     @classmethod
-    def from_pretrained(cls, model_name: str, config: PuncCapLstmConfig, from_tf: bool = False):
+    def from_pretrained(cls, model_name: str, config: PunctCapLstmConfig, from_tf: bool = False):
         model = cls(config)
         model.embeddings = BertModel.from_pretrained(model_name, config=config).embeddings
         return model
@@ -45,9 +47,9 @@ class PuncCapBiLstmBase(nn.Module):
         return None
 
 
-class PuncCapBiLstm(PuncCapBiLstmBase):
+class PunctCapBiLstm(PunctCapBiLstmBase):
     def __init__(self, config):
-        super(PuncCapBiLstm, self).__init__(config)
+        super(PunctCapBiLstm, self).__init__(config)
         self.loss_func = nn.CrossEntropyLoss()
 
     def forward(self,
@@ -77,14 +79,13 @@ class PuncCapBiLstm(PuncCapBiLstmBase):
             p_loss = self.loss_func(p_logits.view(-1, self.num_plabels), plabels.view(-1))
             c_loss = self.loss_func(c_logits.view(-1, self.num_clabels), clabels.view(-1))
             loss = p_loss + c_loss
-            return loss, p_loss, c_loss, seq_ptags, seq_ctags
+            return BaseModelOutput(loss=loss, ploss=p_loss, closs=c_loss, ptags=seq_ptags, ctags=seq_ctags)
         else:
-            return seq_ptags, seq_ctags
+            return BaseModelOutput(ptags=seq_ptags, ctags=seq_ctags)
 
-
-class PuncCapBiLstmCrf(PuncCapBiLstmBase):
+class PunctCapBiLstmCrf(PunctCapBiLstmBase):
     def __init__(self, config):
-        super(PuncCapBiLstmCrf, self).__init__(config)
+        super(PunctCapBiLstmCrf, self).__init__(config)
         self.p_crf = CRF(self.num_plabels, batch_first=True)
         self.c_crf = CRF(self.num_clabels, batch_first=True)
 
@@ -126,9 +127,9 @@ class PuncCapBiLstmCrf(PuncCapBiLstmBase):
             p_log_likelihood = self.p_crf(p_logits, plabels, mask=label_masks.type(torch.uint8))
             c_log_likelihood = self.c_crf(c_logits, clabels, mask=label_masks.type(torch.uint8))
             loss = -1.0 * (p_log_likelihood + c_log_likelihood)
-            return loss, seq_ptags, seq_ctags
+            return BaseModelOutput(loss=loss, ploss=p_log_likelihood, closs=c_log_likelihood, ptags=seq_ptags, ctags=seq_ctags)
         else:
-            return seq_ptags, seq_ctags
+            return BaseModelOutput(ptags=seq_ptags, ctags=seq_ctags)
 
 
 # DEBUG
@@ -136,8 +137,8 @@ if __name__ == "__main__":
     from transformers import BertConfig
 
     model_name = 'bert-base-multilingual-cased'
-    config = PuncCapLstmConfig.from_pretrained(model_name, num_plabels=9, num_clabels=3)
-    model = PuncCapBiLstmCrf.from_pretrained(model_name, config=config, from_tf=False)
+    config = PunctCapLstmConfig.from_pretrained(model_name, num_plabels=9, num_clabels=3)
+    model = PunctCapBiLstmCrf.from_pretrained(model_name, config=config, from_tf=False)
     # model = PuncCapBiLstmCrf(config=config)
 
     input_ids = torch.randint(0, 3000, [2, 20], dtype=torch.long)

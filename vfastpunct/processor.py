@@ -1,13 +1,18 @@
-import random
+from vfastpunct.constants import LOGGER, PUNCT_PATTERN, STRPUNC_MAPPING, PUNCT_MAPPING, CAP_MAPPING, EOS_MARKS
+from vfastpunct.arguments import get_build_dataset_argument, get_split_argument
+
 from typing import List, Union
+from tqdm import tqdm
 from pathlib import Path
 from string import punctuation
-from vfastpunct.constants import STRPUNC_MAPPING, PUNC_MAPPING, CAP_MAPPING, EOS_MARKS
-from tqdm import tqdm
+from prettytable import PrettyTable
 
 import re
-import bisect
 import os
+import sys
+import glob
+import bisect
+import random
 import subprocess
 import pandas as pd
 
@@ -87,36 +92,40 @@ def get_cap_label(token: str) -> str:
 def restoration_punct(examples: List):
     result = ''
     for t in examples:
-        result += f'{CAP_MAPPING[t[-1]](t[0])}{PUNC_MAPPING[t[1]]} '
+        result += f'{CAP_MAPPING[t[-1]](t[0])}{PUNCT_MAPPING[t[1]]} '
     result = re.sub(f'(\d) *([{punctuation}]) *(\d)', r'\1\2\3', result)
     return result.strip()
 
 
-def make_dataset(data_file: Union[str, os.PathLike],
-                 split_test=False,
-                 test_ratio: float = 0.2,
-                 is_truncate: bool = False,
-                 truncate_size: int = 150000000,
-                 skip_ratio: float = 0.0):
-    punct_pattern = re.compile(f'[{punctuation}]+')
-    raw_path = Path(data_file)
+def build_dataset():
+    args = get_build_dataset_argument()
+    LOGGER.info(f"{'=' * 20}BUILD SUMMARY{'=' * 20}")
+    summary_table = PrettyTable(["Arguments", "Values"])
+    summary_table.add_rows([['Corpus', args.corpus_path],
+                            ['Split test', args.split_test],
+                            ['Test ratio', args.test_ratio],
+                            ['Truncate', args.truncate],
+                            ['Truncate size', args.truncate_size],
+                            ['Skip ratio', args.skip_ratio]])
+    LOGGER.info(summary_table)
+    raw_path = Path(args.corpus_path)
     train_trunc_id, test_trunc_id = 0, 0
     train_count, test_count = 0, 0
     total_lines = get_total_lines(raw_path)
     train_writer = open(Path(str(raw_path.parent) + f'/train_{train_trunc_id:03}.txt'), 'w')
-    test_writer = open(Path(str(raw_path.parent) + f'/test_{test_trunc_id:03}.txt'), 'w') if split_test else None
+    test_writer = open(Path(str(raw_path.parent) + f'/test_{test_trunc_id:03}.txt'), 'w') if args.split_test else None
     with open(raw_path, 'r', encoding='utf-8') as f:
         for idx, line in enumerate(tqdm(f, total=total_lines)):
-            if random.uniform(0, 1) < skip_ratio:
+            if random.uniform(0, 1) < args.skip_ratio:
                 continue
             cur_examples = ''
             cur_count = 0
             line = normalize_text(line)
             if len(line.split()) < 10:
                 continue
-            if len(punct_pattern.findall(line)) < 2 and random.uniform(0, 1) < 0.5:
+            if len(PUNCT_PATTERN.findall(line)) < 2 and random.uniform(0, 1) < 0.5:
                 continue
-            matches = punct_pattern.finditer(line)
+            matches = PUNCT_PATTERN.finditer(line)
             end_idx = 0
             for m in matches:
                 tokens = line[end_idx: m.start()].split()
@@ -137,10 +146,10 @@ def make_dataset(data_file: Union[str, os.PathLike],
                 cur_examples += ' '.join([tokens[-1].lower(), punc_label, get_cap_label(tokens[-1])]) + '\n'
                 end_idx = m.end()
                 cur_count += len(tokens)
-            if random.uniform(0, 1) > test_ratio or not split_test:
+            if random.uniform(0, 1) > args.test_ratio or not args.split_test:
                 train_count += cur_count
                 train_writer.write(cur_examples)
-                if is_truncate and train_count >= truncate_size:
+                if args.truncate and train_count >= args.truncate_size:
                     train_count = 0
                     train_trunc_id += 1
                     train_writer.close()
@@ -149,7 +158,7 @@ def make_dataset(data_file: Union[str, os.PathLike],
                 test_count += cur_count
                 test_writer.write(cur_examples)
                 test_count += 1
-                if is_truncate and test_count >= truncate_size:
+                if args.truncate and test_count >= args.truncate_size:
                     test_count = 0
                     test_trunc_id += 1
                     test_writer.close()
@@ -175,17 +184,34 @@ def visualize_dataset(dpath: Union[str or os.PathLike]):
     plt.show()
 
 
-def split_examples(ddir: Union[str or os.PathLike], max_len:int = 190):
-    import glob
-    fpattern = str(Path(ddir + '/*_*.txt'))
-    for f in tqdm(glob.glob(fpattern)):
+def split_examples():
+    args = get_split_argument()
+    LOGGER.info(f"{'=' * 20}SPLIT SUMMARY{'=' * 20}")
+    summary_table = PrettyTable(["Arguments", "Values"])
+    summary_table.add_rows([['Data dir', args.data_dir],
+                            ['Max lenght', args.max_len]])
+    LOGGER.info(summary_table)
+    fpattern = str(Path(args.data_dir + '/*.txt'))
+    dfiles = glob.glob(fpattern)
+    if len(dfiles) == 0:
+        LOGGER.info(f"No found any dataset file in {args.data_dir}; Notice: Only read `.txt` file.")
+        return None
+    tqdm_bar = tqdm(dfiles, desc="Spliting")
+    for idx, f in enumerate(tqdm_bar):
         data_splitted_file = re.sub('\.txt', '_splitted.txt', f)
-        df = split_example_from_file(f, eos_marks=EOS_MARKS, max_len=max_len)
+        df = split_example_from_file(f, eos_marks=EOS_MARKS, max_len=args.max_len)
         df.to_csv(data_splitted_file)
+    LOGGER.info("Hey, DONE !!!!!!")
 
 
 # DEBUG
 if __name__ == "__main__":
-    make_dataset('datasets/Raw/samples/samples.txt', split_test=True, is_truncate=True, skip_ratio=0.5)
-    split_examples('datasets/Raw/samples/', max_len=20)
-
+    if sys.argv[1] == 'build':
+        LOGGER.info("Start BUILD dataset process... go go go!!!")
+        build_dataset()
+    elif sys.argv[1] == 'split':
+        LOGGER.info("Start SPLIT dataset process... go go go!!!")
+        split_examples()
+    else:
+        LOGGER.error(
+            f'[ERROR] - `{sys.argv[1]}` Are you kidding me? I only know `build` or `split`. Please read the README!!!!')

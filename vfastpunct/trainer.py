@@ -1,6 +1,6 @@
 from vfastpunct.arguments import get_train_argument, get_test_argument, get_download_argument
-from vfastpunct.constants import LOGGER, PUNCCAP_MODEL_MAPPING, PUNC_LABEL2ID, CAP_LABEL2ID
-from vfastpunct.datasets import build_dataset, build_and_cached_punccap_dataset, build_punctcap_dataset
+from vfastpunct.constants import LOGGER, MODEL_MAPPING, PUNCT_LABEL2ID, CAP_LABEL2ID
+from vfastpunct.datasets import build_and_cached_dataset
 from vfastpunct.ultis import get_total_model_parameters, download_dataset_from_drive
 
 from typing import Union, Generator
@@ -29,38 +29,26 @@ def set_ramdom_seed(seed: int):
     torch.manual_seed(seed)
 
 
-def get_datasets(ddir: Union[str, os.PathLike],
-                 tokenizer,
-                 dtype: str = 'train',
-                 max_seq_length: int = 190,
-                 device: str = 'cpu',
-                 overwrite_data: bool = False,
-                 use_crf: bool = True,
-                 cached_dataset: bool = False) -> Generator:
-    data_files = glob.glob(str(Path(ddir + f'/{dtype}_*_splitted.txt')))
+def get_datasets(args, tokenizer, dtype: str = 'train',  use_crf: bool = False, device: str = 'cpu') -> Generator:
+    data_files = glob.glob(str(Path(args.data_dir + f'/{dtype}_*_splitted.txt')))
+    LOGGER.info(f"Found {len(data_files)} to {dtype.upper()} in {args.data_dir}")
     for fpath in data_files:
-        LOGGER.info(f"Load file {fpath}")
         fname = os.path.basename(fpath)
-        if cached_dataset:
-            punccap_dataset = build_and_cached_punccap_dataset(fpath,
-                                                               tokenizer,
-                                                               max_seq_length=max_seq_length,
-                                                               overwrite_data= overwrite_data,
-                                                               device=device,
-                                                               use_crf=use_crf)
-        else:
-            punccap_dataset = build_punctcap_dataset(fpath,
-                                                    tokenizer,
-                                                    max_seq_length=max_seq_length,
-                                                    device=device,
-                                                    use_crf=use_crf)
-        yield len(data_files), fname, punccap_dataset
+        dataset = build_and_cached_dataset(fpath,
+                                           tokenizer,
+                                           args.task,
+                                           max_seq_length=args.max_seq_length,
+                                           use_crf=use_crf,
+                                           cached_dataset=args.cached_dataset,
+                                           overwrite_data=args.overwrite_data,
+                                           device=device)
+        yield len(data_files), fname, dataset
 
 
 def save_model(args, saved_file, model):
     saved_data = {
         'model': model.state_dict(),
-        'pclasses': PUNC_LABEL2ID,
+        'pclasses': PUNCT_LABEL2ID,
         'cclasses': CAP_LABEL2ID,
         'args': args
     }
@@ -68,9 +56,9 @@ def save_model(args, saved_file, model):
 
 
 def validate(args,
-             cur_epoch: int,
              model,
              tokenizer,
+             cur_epoch: int = 0,
              device: str = 'cpu',
              use_crf: bool = False,
              is_test=False,
@@ -80,44 +68,41 @@ def validate(args,
     eval_loss, eval_ploss, eval_closs, nb_eval_steps = 0.0, 0.0, 0.0, 0
     eval_ppreds, eval_plabels, eval_cpreds, eval_clabels = [], [], [], []
     evaled_sets = 0
-    for num_of_sets, fname, valid_dataset in get_datasets(args.data_dir,
-                                                          tokenizer,
-                                                          dtype='test',
-                                                          max_seq_length=args.max_seq_length,
-                                                          overwrite_data=args.overwrite_data,
-                                                          cached_dataset=args.cached_dataset,
-                                                          device=device,
-                                                          use_crf=use_crf):
+    for num_of_sets, fname, valid_dataset in get_datasets(args, tokenizer, 'test', use_crf=use_crf, device=device):
         step_loss, step_ploss, step_closs = 0.0, 0.0, 0.0
         evaled_sets += 1
         valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
         # Run one step on sub-dataset
         for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), desc=f'[EVAL]Epoch {cur_epoch}/{args.epochs}; Sub-dataset{evaled_sets}/{num_of_sets}', position=0, leave=True):
-            loss, ploss, closs, eval_plogits, eval_clogits = model(**batch)
-            step_loss += loss.item()
-            step_ploss += ploss.item()
-            step_closs += closs.item()
+            outputs = model(**batch)
+            step_loss += outputs.loss.item()
+            step_ploss += outputs.ploss.item()
+            step_closs += outputs.closs.item()
             nb_eval_steps += 1
             active_accuracy = batch['label_masks'].view(-1) != 0
             plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
-            clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
             eval_plabels.extend(plabels.cpu().tolist())
-            eval_clabels.extend(clabels.cpu().tolist())
-            if isinstance(eval_plogits[-1], list):
-                eval_ppreds.extend(list(itertools.chain(*eval_plogits)))
-                eval_cpreds.extend(list(itertools.chain(*eval_clogits)))
+            if 'clabels' in batch:
+                clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
+                eval_clabels.extend(clabels.cpu().tolist())
+            if isinstance(outputs.ptags[-1], list):
+                eval_ppreds.extend(list(itertools.chain(*outputs.ptags)))
+                eval_cpreds.extend(list(itertools.chain(*outputs.ctags)))
             else:
-                eval_ppreds.extend(eval_plogits)
-                eval_cpreds.extend(eval_clogits)
+                eval_ppreds.extend(outputs.ptags)
+                eval_cpreds.extend(outputs.ctags)
 
         eval_loss += step_loss
         eval_ploss += step_ploss
         eval_closs += step_closs
         if tb_writer is not None:
             preports = classification_report(eval_plabels, eval_ppreds, output_dict=True, zero_division=0)
-            creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
-            step_avg_f1 = (preports['macro avg']['f1-score'] + creports['macro avg']['f1-score']) / 2
-            step_avg_acc = (preports['accuracy'] + creports['accuracy']) / 2
+            step_avg_f1 = preports['macro avg']['f1-score']
+            step_avg_acc = preports['accuracy']
+            if len(eval_cpreds) > 0:
+                creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
+                step_avg_f1 = (step_avg_f1 + creports['macro avg']['f1-score']) / 2
+                step_avg_acc = (step_avg_acc + creports['accuracy']) / 2
             tb_writer.add_scalar(f'EVAL_STEP_LOSS/{fname}', (step_loss / len(valid_iterator)), cur_epoch)
             tb_writer.add_scalar(f'EVAL_STEP_ACC/{fname}', step_avg_acc,cur_epoch)
             tb_writer.add_scalar(f'EVAL_STEP_F1/{fname}', step_avg_f1, cur_epoch)
@@ -127,18 +112,23 @@ def validate(args,
     epoch_closs = eval_closs / nb_eval_steps
     if is_test:
         preports = classification_report(eval_plabels, eval_ppreds, zero_division=0)
-        creports = classification_report(eval_clabels, eval_cpreds, zero_division=0)
         LOGGER.info(f'\tTest Loss: {eval_loss}; Spend time: {time.time() - start_time}')
         LOGGER.info('Punct Report:')
         LOGGER.info(preports)
-        LOGGER.info('Cap Report:')
-        LOGGER.info(creports)
+        if len(eval_cpreds) > 0:
+            creports = classification_report(eval_clabels, eval_cpreds, zero_division=0)
+            LOGGER.info('Cap Report:')
+            LOGGER.info(creports)
         return epoch_loss
     else:
         preports = classification_report(eval_plabels, eval_ppreds, output_dict=True, zero_division=0)
-        creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
-        epoch_avg_f1 = (preports['macro avg']['f1-score'] + creports['macro avg']['f1-score']) / 2
-        epoch_avg_acc = (preports['accuracy'] + creports['accuracy']) / 2
+        epoch_avg_f1 = preports['macro avg']['f1-score']
+        epoch_avg_acc = preports['accuracy']
+        creports = {'accuracy': 0.0, 'macro avg': {'f1-score': 0.0}}
+        if len(eval_cpreds) > 0:
+            creports = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
+            epoch_avg_f1 = (epoch_avg_f1 + creports['macro avg']['f1-score']) / 2
+            epoch_avg_acc = (epoch_avg_acc + creports['accuracy']) / 2
         LOGGER.info(f"\t{'*' * 20}Validate Summary{'*' * 20}")
         LOGGER.info(f"\tValidation Loss: {epoch_loss:.4f} (pLoss: {epoch_ploss:.4f}; cLoss: {epoch_closs:.4f});\n"
                     f"\tAccuracy: {epoch_avg_acc:.4f} (pAccuracy: {preports['accuracy']:.4f}; cAccuracy: {creports['accuracy']:.4f});\n"
@@ -161,14 +151,7 @@ def train_one_epoch(args,
     tr_loss, nb_tr_steps = 0.0, 0.0
     model.train()
     trained_set = 0
-    for num_of_sets, fname, train_dataset in get_datasets(args.data_dir,
-                                                          tokenizer,
-                                                          dtype='train',
-                                                          max_seq_length=args.max_seq_length,
-                                                          overwrite_data=args.overwrite_data,
-                                                          cached_dataset=args.cached_dataset,
-                                                          device=device,
-                                                          use_crf=use_crf):
+    for num_of_sets, fname, train_dataset in get_datasets(args, tokenizer, 'train', use_crf=use_crf, device=device):
         train_sampler = RandomSampler(train_dataset)
         train_iterator = DataLoader(train_dataset,
                                     sampler=train_sampler,
@@ -176,15 +159,17 @@ def train_one_epoch(args,
                                     num_workers=0)
         step_loss = 0.0
         trained_set += 1
-        for idx, batch in tqdm(enumerate(train_iterator), total=len(train_iterator), desc=f'[TRAIN]Epoch {cur_epoch}/{args.epochs}; Sub-dataset {trained_set}/{num_of_sets}', position=0, leave=True):
-            loss, _, _, _, _ = model(**batch)
-            tr_loss += loss.item()
-            step_loss += loss.item()
+        tqdm_desc = f'[TRAIN]Epoch {cur_epoch}/{args.epochs}; Sub-dataset {trained_set}/{num_of_sets}'
+        tqdm_bar = tqdm(enumerate(train_iterator), total=len(train_iterator), desc=tqdm_desc, position=0, leave=True)
+        for idx, batch in tqdm_bar:
+            outputs = model(**batch)
+            tr_loss += outputs.loss.item()
+            step_loss += outputs.loss.item()
             nb_tr_steps += 1
             torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
             # backward pass
             optim.zero_grad()
-            loss.backward()
+            outputs.loss.backward()
             optim.step()
             # Save checkpoint to backup model
             if nb_tr_steps % args.save_step == 0:
@@ -213,24 +198,6 @@ def test():
     configs = checkpoint_data['args']
     tokenizer = AutoTokenizer.from_pretrained(configs.model_name_or_path)
 
-    test_dataset = build_dataset(args.data_dir,
-                                 tokenizer=tokenizer,
-                                 data_type='test',
-                                 max_seq_length=configs.max_seq_length,
-                                 overwrite_data=args.overwrite_data,
-                                 device=device)
-
-    test_iterator = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
-    model_archs = PUNCCAP_MODEL_MAPPING[args.model_arch]
-    config = model_archs['config_clss'].from_pretrained(args.model_name_or_path,
-                                                        num_plabels=len(PUNC_LABEL2ID),
-                                                        num_clabels=len(CAP_LABEL2ID),
-                                                        finetuning_task=args.task)
-    model = model_archs['model_clss'].from_pretrained(args.model_name_or_path, config=config, from_tf=False)
-    model.load_state_dict(checkpoint_data['model'])
-    model.to(device)
-    validate(model, test_iterator, is_test=True)
-
 
 def train():
     args = get_train_argument()
@@ -248,9 +215,9 @@ def train():
     tensorboard_writer = SummaryWriter()
 
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
-    model_archs = PUNCCAP_MODEL_MAPPING[args.model_arch]
+    model_archs = MODEL_MAPPING[args.task][args.model_arch]
     config = model_archs['config_clss'].from_pretrained(args.model_name_or_path,
-                                                        num_plabels=len(PUNC_LABEL2ID),
+                                                        num_plabels=len(PUNCT_LABEL2ID),
                                                         num_clabels=len(CAP_LABEL2ID),
                                                         finetuning_task=args.task)
     model = model_archs['model_clss'].from_pretrained(args.model_name_or_path, config=config, from_tf=False)
@@ -305,7 +272,6 @@ def train():
     # Run
     best_score = 0.0
     cumulative_early_steps = 0
-    trained_step = 0
     for epoch in range(int(args.epochs)):
         if cumulative_early_steps > args.early_stop:
             LOGGER.info(f"Hey!!! Early stopping. Check your saved model.")
@@ -364,4 +330,5 @@ if __name__ == "__main__":
         download()
     else:
         LOGGER.error(
-            f'[ERROR] - `{sys.argv[1]}` Are you kidding me? I only know `train` or `test`. Please read the README!!!!')
+            f'[ERROR] - `{sys.argv[1]}` Are you kidding me? I only know `train`, `test` or `download`. Please read '
+            f'the README!!!!')
