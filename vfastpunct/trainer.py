@@ -1,6 +1,6 @@
 from vfastpunct.arguments import get_train_argument, get_test_argument, get_download_argument
 from vfastpunct.constants import LOGGER, PUNCCAP_MODEL_MAPPING, PUNC_LABEL2ID, CAP_LABEL2ID
-from vfastpunct.datasets import build_dataset, build_punccap_dataset, build_punctcap_dataset
+from vfastpunct.datasets import build_dataset, build_and_cached_punccap_dataset, build_punctcap_dataset
 from vfastpunct.ultis import get_total_model_parameters, download_dataset_from_drive
 
 from typing import Union, Generator
@@ -18,7 +18,15 @@ import glob
 import sys
 import time
 import torch
+import random
+import numpy as np
 import itertools
+
+
+def set_ramdom_seed(seed: int):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
 
 
 def get_datasets(ddir: Union[str, os.PathLike],
@@ -26,16 +34,26 @@ def get_datasets(ddir: Union[str, os.PathLike],
                  dtype: str = 'train',
                  max_seq_length: int = 190,
                  device: str = 'cpu',
-                 use_crf: bool = True) -> Generator:
+                 overwrite_data: bool = False,
+                 use_crf: bool = True,
+                 cached_dataset: bool = False) -> Generator:
     data_files = glob.glob(str(Path(ddir + f'/{dtype}_*_splitted.txt')))
     for fpath in data_files:
         LOGGER.info(f"Load file {fpath}")
         fname = os.path.basename(fpath)
-        punccap_dataset = build_punctcap_dataset(fpath,
-                                                tokenizer,
-                                                max_seq_length=max_seq_length,
-                                                device=device,
-                                                use_crf=use_crf)
+        if cached_dataset:
+            punccap_dataset = build_and_cached_punccap_dataset(fpath,
+                                                               tokenizer,
+                                                               max_seq_length=max_seq_length,
+                                                               overwrite_data= overwrite_data,
+                                                               device=device,
+                                                               use_crf=use_crf)
+        else:
+            punccap_dataset = build_punctcap_dataset(fpath,
+                                                    tokenizer,
+                                                    max_seq_length=max_seq_length,
+                                                    device=device,
+                                                    use_crf=use_crf)
         yield len(data_files), fname, punccap_dataset
 
 
@@ -63,11 +81,13 @@ def validate(args,
     eval_ppreds, eval_plabels, eval_cpreds, eval_clabels = [], [], [], []
     evaled_sets = 0
     for num_of_sets, fname, valid_dataset in get_datasets(args.data_dir,
-                                            tokenizer,
-                                            dtype='test',
-                                            max_seq_length=args.max_seq_length,
-                                            device=device,
-                                            use_crf=use_crf):
+                                                          tokenizer,
+                                                          dtype='test',
+                                                          max_seq_length=args.max_seq_length,
+                                                          overwrite_data=args.overwrite_data,
+                                                          cached_dataset=args.cached_dataset,
+                                                          device=device,
+                                                          use_crf=use_crf):
         step_loss, step_ploss, step_closs = 0.0, 0.0, 0.0
         evaled_sets += 1
         valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
@@ -142,10 +162,13 @@ def train_one_epoch(args,
     model.train()
     trained_set = 0
     for num_of_sets, fname, train_dataset in get_datasets(args.data_dir,
-                                             tokenizer,
-                                             max_seq_length=args.max_seq_length,
-                                             device=device,
-                                             use_crf=use_crf):
+                                                          tokenizer,
+                                                          dtype='train',
+                                                          max_seq_length=args.max_seq_length,
+                                                          overwrite_data=args.overwrite_data,
+                                                          cached_dataset=args.cached_dataset,
+                                                          device=device,
+                                                          use_crf=use_crf):
         train_sampler = RandomSampler(train_dataset)
         train_iterator = DataLoader(train_dataset,
                                     sampler=train_sampler,
@@ -211,6 +234,7 @@ def test():
 
 def train():
     args = get_train_argument()
+    set_ramdom_seed(args.seed)
     use_crf = True if 'crf' in args.model_arch else False
     device = 'cuda' if not args.no_cuda and torch.cuda.is_available() else 'cpu'
 
@@ -260,19 +284,23 @@ def train():
     summary_table.add_rows([['Task', args.task],
                             ['Model architecture', args.model_arch],
                             ['Encoder name', args.model_name_or_path],
+                            ['Load weights', args.load_weights],
                             ['Total params', total_params],
                             ['Trainable params', trainable_param],
                             ['Max sequence length', args.max_seq_length],
                             ['Train batch size', args.train_batch_size],
                             ['Eval batch size', args.eval_batch_size],
+                            ['Number of workers', args.num_worker],
                             ['Learning rate', args.learning_rate],
                             ['Number of epochs', args.epochs],
                             ['Weight decay', args.weight_decay],
+                            ['Scheduler patience', args.scheduler_patience],
                             ['Adam epsilon', args.adam_epsilon],
                             ['Max grad norm', args.max_grad_norm],
                             ['Early stop', args.early_stop],
                             ['Save step', args.save_step],
-                            ['Use Cuda', not args.no_cuda]])
+                            ['Use Cuda', not args.no_cuda],
+                            ['Cached dataset', args.cached_dataset]])
     LOGGER.info(summary_table)
     # Run
     best_score = 0.0

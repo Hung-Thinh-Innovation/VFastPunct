@@ -36,8 +36,10 @@ def get_train_argument():
                         help="Training task selected in the list: vipunc, vipunccap.")
     parser.add_argument("--data_dir", default='datasets/News', type=str,
                         help="The input data dir. Should contain the .csv files (or other data files) for the task.")
-    parser.add_argument("--overwrite_data", action='store_true',
+    parser.add_argument("--overwrite_data", action='store_true', default=False,
                         help="Whether not to overwirte splitted dataset")
+    parser.add_argument("--cached_dataset", action='store_true', default=False,
+                        help="Whether not to cached converted dataset")
     parser.add_argument("--load_weights", default=None, type=str,
                         help='Path of pretrained file.')
     parser.add_argument("--model_name_or_path", default='bert-base-multilingual-cased', type=str,
@@ -70,7 +72,7 @@ def get_train_argument():
                         help="Max gradient norm.")
     parser.add_argument("--early_stop", default=10.0, type=float,
                         help="")
-    parser.add_argument("--no_cuda", action='store_true',
+    parser.add_argument("--no_cuda", action='store_true', default=False,
                         help="Whether not to use CUDA when available")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")

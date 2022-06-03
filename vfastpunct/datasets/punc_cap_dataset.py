@@ -211,18 +211,26 @@ class PunctCapDataset(Dataset):
         return len(self.examples)
 
 
-def build_punccap_dataset(dfile: Union[str, os.PathLike],
-                          tokenizer,
-                          data_type: str = 'train',
-                          max_seq_length: int = 128,
-                          overwrite_data: bool = False,
-                          device: str = 'cpu',
-                          use_crf: bool = False):
+def build_and_cached_punccap_dataset(dfile: Union[str, os.PathLike],
+                                     tokenizer,
+                                     data_type: str = 'train',
+                                     max_seq_length: int = 128,
+                                     overwrite_data: bool = False,
+                                     use_crf: bool = False,
+                                     device: str = 'cpu'):
     dfile = Path(dfile)
-    LOGGER.info("Creating features from dataset file at %s", dfile)
-    data_df = pd.read_csv(dfile)
-    punccap_examples = convert_examples_to_feature(data_df, tokenizer, max_len=max_seq_length, use_crf=use_crf)
-    return PuncCapDataset(punccap_examples, device=device)
+    cached_path = dfile.with_suffix('.cached')
+    if not os.path.exists(cached_path):
+        LOGGER.info("Read examples from dataset file at %s", dfile)
+        data_df = pd.read_csv(dfile)
+        LOGGER.info("Creating features from dataset file at %s", dfile)
+        punctcap_features = convert_examples_to_feature(data_df, tokenizer, max_len=max_seq_length, use_crf=use_crf)
+        LOGGER.info("Cached features from cached file at %s", cached_path)
+        torch.save(punctcap_features, cached_path)
+    else:
+        LOGGER.info("Load features from cached file at %s", cached_path)
+        punctcap_features = torch.load(cached_path)
+    return PuncCapDataset(punctcap_features, device=device)
 
 
 def build_punctcap_dataset(dfile: Union[str, os.PathLike],
