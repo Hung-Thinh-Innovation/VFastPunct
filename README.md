@@ -5,9 +5,23 @@ Code by 🧑‍💻**Trong-Dat Ngo**.
 Fast punctuation and capitalization restoration using Transformer Models for 🇻🇳Vietnamese
 
 # Run
+## Dataset preprocess
+```bash
+python vfastpunct/processor.py build --corpus_path datasets/corpus-full.txt --split_test --truncate
+```
+> Arguments:
+> + ***type*** (`str`,`*required`): What is process type to be run. Must in [`build`, `split`].
+> + ***corpus_path*** (`Union[str, os.PathLike]`, `*optional`): Training task selected in the list: [`punct`, `punctcap`]. Default: `punctcap`
+> + ***split_test*** (`bool`, `*required`): The input data dir. Should contain the .csv files (or other data files) for the task.
+> + ***test_ratio*** (`bool`, `*optional`) : Whether not to overwirte splitted dataset. Default=False
+> + ***truncate*** (`Union[str, os.PathLike]`, `*optional`): Path of pretrained file.
+> + ***truncate_size*** (`str`, `*required`): Pre-trained model selected in the list: bert-base-uncased, bert-base-cased... Default=bert-base-multilingual-cased 
+> + ***skip_ratio*** (`str`, `*required`): Pre-trained model selected in the list: bert-base-uncased, bert-base-cased... Default=bert-base-multilingual-cased 
+>
+
 ## Train process
 ```bash
-python vfastpunc/trainer.py train --model_arch lstm_softmax --model_name_or_path bert-base-multilingual-cased --learning_rate 1e-3 --max_seq_length 190 --epochs 100 --train_batch_size 32 --eval_batch_size 16 --data_dir datasets/ --output_dir outputs/
+python vfastpunct/trainer.py train --model_arch lstm_softmax --model_name_or_path bert-base-multilingual-cased --learning_rate 1e-3 --max_seq_length 190 --epochs 100 --train_batch_size 32 --eval_batch_size 16 --data_dir datasets/ --output_dir outputs/
 ```
 
 or
@@ -16,8 +30,8 @@ or
 bash ./train.sh
 ```
 > Arguments:
-> + ***type*** (`str`,`*required`): What is process type to be run. Must in [`train`, `test`].
-> + ***task*** (`str`, `*optional`): Training task selected in the list: [`vipunc`, `vipunccap`]. Default: `vinpunccap`
+> + ***type*** (`str`,`*required`): What is process type to be run. Must in [`train`, `test`, `download`].
+> + ***task*** (`str`, `*optional`): Training task selected in the list: [`punct`, `punctcap`]. Default: `punctcap`
 > + ***data_dir*** (`Union[str, os.PathLike]`, `*required`): The input data dir. Should contain the .csv files (or other data files) for the task.
 > + ***overwrite_data*** (`bool`, `*optional`) : Whether not to overwirte splitted dataset. Default=False
 > + ***load_weights*** (`Union[str, os.PathLike]`, `*optional`): Path of pretrained file.

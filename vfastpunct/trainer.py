@@ -73,25 +73,25 @@ def validate(args,
         evaled_sets += 1
         valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
         # Run one step on sub-dataset
-        for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), desc=f'[EVAL]Epoch {cur_epoch}/{args.epochs}; Sub-dataset{evaled_sets}/{num_of_sets}', position=0, leave=True):
-            outputs = model(**batch)
-            step_loss += outputs.loss.item()
-            step_ploss += outputs.ploss.item()
-            step_closs += outputs.closs.item()
-            nb_eval_steps += 1
-            active_accuracy = batch['label_masks'].view(-1) != 0
-            plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
-            eval_plabels.extend(plabels.cpu().tolist())
-            if 'clabels' in batch:
-                clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
-                eval_clabels.extend(clabels.cpu().tolist())
-            if isinstance(outputs.ptags[-1], list):
-                eval_ppreds.extend(list(itertools.chain(*outputs.ptags)))
-                eval_cpreds.extend(list(itertools.chain(*outputs.ctags)))
-            else:
-                eval_ppreds.extend(outputs.ptags)
-                eval_cpreds.extend(outputs.ctags)
-
+        with torch.no_grad():
+            for idx, batch in tqdm(enumerate(valid_iterator), total=len(valid_iterator), desc=f'[EVAL]Epoch {cur_epoch}/{args.epochs}; Sub-dataset{evaled_sets}/{num_of_sets}', position=0, leave=True):
+                outputs = model(**batch)
+                step_loss += outputs.loss.detach().item()
+                step_ploss += outputs.ploss.detach().item()
+                step_closs += outputs.closs.detach().item()
+                nb_eval_steps += 1
+                active_accuracy = batch['label_masks'].view(-1) != 0
+                plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
+                eval_plabels.extend(plabels.detach().cpu().tolist())
+                if 'clabels' in batch:
+                    clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
+                    eval_clabels.extend(clabels.detach().cpu().tolist())
+                if isinstance(outputs.ptags[-1], list):
+                    eval_ppreds.extend(list(itertools.chain(*outputs.ptags)))
+                    eval_cpreds.extend(list(itertools.chain(*outputs.ctags)))
+                else:
+                    eval_ppreds.extend(outputs.ptags)
+                    eval_cpreds.extend(outputs.ctags)
         eval_loss += step_loss
         eval_ploss += step_ploss
         eval_closs += step_closs
@@ -106,7 +106,6 @@ def validate(args,
             tb_writer.add_scalar(f'EVAL_STEP_LOSS/{fname}', (step_loss / len(valid_iterator)), cur_epoch)
             tb_writer.add_scalar(f'EVAL_STEP_ACC/{fname}', step_avg_acc,cur_epoch)
             tb_writer.add_scalar(f'EVAL_STEP_F1/{fname}', step_avg_f1, cur_epoch)
-
     epoch_loss = eval_loss / nb_eval_steps
     epoch_ploss = eval_ploss / nb_eval_steps
     epoch_closs = eval_closs / nb_eval_steps
@@ -163,14 +162,14 @@ def train_one_epoch(args,
         tqdm_bar = tqdm(enumerate(train_iterator), total=len(train_iterator), desc=tqdm_desc, position=0, leave=True)
         for idx, batch in tqdm_bar:
             outputs = model(**batch)
-            tr_loss += outputs.loss.item()
-            step_loss += outputs.loss.item()
-            nb_tr_steps += 1
-            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
             # backward pass
+            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
             optim.zero_grad()
             outputs.loss.backward()
             optim.step()
+            tr_loss += outputs.loss.detach().item()
+            step_loss += outputs.loss.detach().item()
+            nb_tr_steps += 1
             # Save checkpoint to backup model
             if nb_tr_steps % args.save_step == 0:
                 saved_file = Path(args.output_dir + f"/backup_model.pt")
