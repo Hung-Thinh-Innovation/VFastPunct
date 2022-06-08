@@ -32,7 +32,7 @@ def build_and_cached_dataset(dfile_path: Union[str, os.PathLike],
     dfile_path = Path(dfile_path)
     if cached_dataset:
         cached_path = dfile_path.with_suffix('.cached')
-        if not os.path.exists(cached_path):
+        if not os.path.exists(cached_path) or overwrite_data:
             LOGGER.info("Read examples from dataset file at %s", dfile_path)
             data_df = pd.read_csv(dfile_path)
             LOGGER.info("Creating features from dataset file at %s", dfile_path)

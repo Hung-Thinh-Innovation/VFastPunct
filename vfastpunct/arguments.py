@@ -20,7 +20,8 @@ def get_build_dataset_argument():
     parser.add_argument("--split_test", action='store_true', default=False,
                         help="Whether not to split dataset to train and test set")
     parser.add_argument("--test_ratio", default=0.2, type=float,
-                        help="It should be between 0.0 and 1.0 and represent the proportion of the dataset to include in the test split")
+                        help="It should be between 0.0 and 1.0 and represent the proportion of the dataset to include "
+                             "in the test split")
     parser.add_argument("--truncate", action='store_true', default=False,
                         help="Truncate large dataset file to smaller files.")
     parser.add_argument("--truncate_size", default=150000000, type=int,
@@ -49,12 +50,17 @@ def get_test_argument():
                         help='What processs to be run')
     parser.add_argument("--data_dir", default='datasets/News', type=str,
                         help="The input data dir. Should contain the .txt files (or other data files) for the task.")
-    parser.add_argument("--overwrite_data", action='store_true',
-                        help="Whether not to overwirte splitted dataset")
     parser.add_argument("--model_path", default='outputs/best_model.pt', type=str,
                         help="")
+    parser.add_argument("--overwrite_data", action='store_true', default=False,
+                        help="Whether not to overwirte splitted dataset")
+    parser.add_argument("--cached_dataset", action='store_true', default=False,
+                        help="Whether not to cached converted dataset")
     parser.add_argument("--batch_size", default=16, type=int,
                         help="Total batch size for eval.")
+    parser.add_argument('--num_worker', type=int, default=2,
+                        help="How many subprocesses to use for data loading. 0 means that the data will be loaded in "
+                             "the main process.")
     parser.add_argument("--no_cuda", action='store_true',
                         help="Whether not to use CUDA when available")
     return parser.parse_args()
@@ -109,7 +115,8 @@ def get_train_argument():
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
     parser.add_argument('--num_worker', type=int, default=2,
-                        help="How many subprocesses to use for data loading. 0 means that the data will be loaded in the main process.")
+                        help="How many subprocesses to use for data loading. 0 means that the data will be loaded "
+                             "in the main process.")
     parser.add_argument('--save_step', type=int, default=20000,
                         help="")
     parser.add_argument('--scheduler_patience', type=int, default=2,

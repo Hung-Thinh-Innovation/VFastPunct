@@ -29,24 +29,21 @@ def set_ramdom_seed(seed: int):
     torch.manual_seed(seed)
 
 
-def get_datasets(args, tokenizer, dtype: str = 'train',  use_crf: bool = False, device: str = 'cpu') -> Generator:
+def get_datasets(args, tokenizer, dtype: str = 'train',  use_crf: bool = False, device: str = 'cpu'):
     data_files = glob.glob(str(Path(args.data_dir + f'/{dtype}_*_splitted.txt')))
-    random.shuffle(data_files)
+    assert len(data_files) > 0, f'Not found {dtype.upper()} set !!!'
     LOGGER.info(f"Found {len(data_files)} to {dtype.upper()} in {args.data_dir}")
-    count = 0
-    for fpath in data_files:
-        fname = os.path.basename(fpath)
-        dataset = build_and_cached_dataset(fpath,
-                                           tokenizer,
-                                           args.task,
-                                           max_seq_length=args.max_seq_length,
-                                           use_crf=use_crf,
-                                           cached_dataset=args.cached_dataset,
-                                           overwrite_data=args.overwrite_data,
-                                           device=device)
-        yield len(data_files), fname, dataset
-        count += 1
-        if count >= 5: break
+    fpath = data_files[-1]
+    fname = os.path.basename(fpath)
+    dataset = build_and_cached_dataset(fpath,
+                                       tokenizer,
+                                       args.task,
+                                       max_seq_length=args.max_seq_length,
+                                       use_crf=use_crf,
+                                       cached_dataset=args.cached_dataset,
+                                       overwrite_data=args.overwrite_data,
+                                       device=device)
+    return fname, dataset
 
 
 def save_model(args, saved_file, model):
@@ -61,57 +58,42 @@ def save_model(args, saved_file, model):
 
 def validate(args,
              model,
-             tokenizer,
+             valid_dataset,
              cur_epoch: int = 0,
-             device: str = 'cpu',
-             use_crf: bool = False,
-             is_test=False,
-             tb_writer=None):
+             is_test=False):
     start_time = time.time()
     model.eval()
     eval_loss, eval_ploss, eval_closs, nb_eval_steps = 0.0, 0.0, 0.0, 0
     eval_ppreds, eval_plabels, eval_cpreds, eval_clabels = [], [], [], []
     evaled_sets = 0
-    for num_of_sets, fname, valid_dataset in get_datasets(args, tokenizer, 'test', use_crf=use_crf, device=device):
-        step_loss, step_ploss, step_closs = 0.0, 0.0, 0.0
-        evaled_sets += 1
-        valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
-        # Run one step on sub-dataset
-        with torch.no_grad():
-            tqdm_desc = f'[EVAL]Epoch {cur_epoch}/{args.epochs}; Sub-dataset{evaled_sets}/{num_of_sets}'
-            eval_bar = tqdm(enumerate(valid_iterator), total=len(valid_iterator), desc=tqdm_desc)
-            for idx, batch in eval_bar:
-                outputs = model(**batch)
-                step_loss += outputs.loss.detach().item()
-                step_ploss += outputs.ploss.detach().item()
-                step_closs += outputs.closs.detach().item()
-                nb_eval_steps += 1
-                active_accuracy = batch['label_masks'].view(-1) != 0
-                plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
-                eval_plabels.extend(plabels.detach().cpu().tolist())
-                if 'clabels' in batch:
-                    clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
-                    eval_clabels.extend(clabels.detach().cpu().tolist())
-                if isinstance(outputs.ptags[-1], list):
-                    eval_ppreds.extend(list(itertools.chain(*outputs.ptags)))
-                    eval_cpreds.extend(list(itertools.chain(*outputs.ctags)))
-                else:
-                    eval_ppreds.extend(outputs.ptags)
-                    eval_cpreds.extend(outputs.ctags)
+    step_loss, step_ploss, step_closs = 0.0, 0.0, 0.0
+    evaled_sets += 1
+    valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
+    # Run one step on sub-dataset
+    with torch.no_grad():
+        tqdm_desc = f'[EVAL]Epoch {cur_epoch}/{args.epochs};'
+        eval_bar = tqdm(enumerate(valid_iterator), total=len(valid_iterator), desc=tqdm_desc)
+        for idx, batch in eval_bar:
+            outputs = model(**batch)
+            step_loss += outputs.loss.detach().item()
+            step_ploss += outputs.ploss.detach().item()
+            step_closs += outputs.closs.detach().item()
+            nb_eval_steps += 1
+            active_accuracy = batch['label_masks'].view(-1) != 0
+            plabels = torch.masked_select(batch['plabels'].view(-1), active_accuracy)
+            eval_plabels.extend(plabels.detach().cpu().tolist())
+            if 'clabels' in batch:
+                clabels = torch.masked_select(batch['clabels'].view(-1), active_accuracy)
+                eval_clabels.extend(clabels.detach().cpu().tolist())
+            if isinstance(outputs.ptags[-1], list):
+                eval_ppreds.extend(list(itertools.chain(*outputs.ptags)))
+                eval_cpreds.extend(list(itertools.chain(*outputs.ctags)))
+            else:
+                eval_ppreds.extend(outputs.ptags)
+                eval_cpreds.extend(outputs.ctags)
         eval_loss += step_loss
         eval_ploss += step_ploss
         eval_closs += step_closs
-        if tb_writer is not None:
-            preports: dict = classification_report(eval_plabels, eval_ppreds, output_dict=True, zero_division=0)
-            step_avg_f1 = preports['macro avg']['f1-score']
-            step_avg_acc = preports['accuracy']
-            if len(eval_cpreds) > 0:
-                creports: dict = classification_report(eval_clabels, eval_cpreds, output_dict=True, zero_division=0)
-                step_avg_f1 = (step_avg_f1 + creports['macro avg']['f1-score']) / 2
-                step_avg_acc = (step_avg_acc + creports['accuracy']) / 2
-            tb_writer.add_scalar(f'EVAL_STEP_LOSS/{fname}', (step_loss / len(valid_iterator)), cur_epoch)
-            tb_writer.add_scalar(f'EVAL_STEP_ACC/{fname}', step_avg_acc, cur_epoch)
-            tb_writer.add_scalar(f'EVAL_STEP_F1/{fname}', step_avg_f1, cur_epoch)
     epoch_loss = eval_loss / nb_eval_steps
     epoch_ploss = eval_ploss / nb_eval_steps
     epoch_closs = eval_closs / nb_eval_steps
@@ -146,45 +128,39 @@ def validate(args,
 
 
 def train_one_epoch(args,
+                    train_dataset,
                     cur_epoch: int,
                     model,
                     optim,
-                    tokenizer,
-                    max_grad_norm: float = 1.0,
-                    device: str = 'cpu',
-                    use_crf: bool = False,
-                    tb_writer=None):
+                    max_grad_norm: float = 1.0):
     start_time = time.time()
     tr_loss, nb_tr_steps = 0.0, 0.0
     model.train()
     trained_set = 0
-    for num_of_sets, fname, train_dataset in get_datasets(args, tokenizer, 'train', use_crf=use_crf, device=device):
-        train_sampler = RandomSampler(train_dataset)
-        train_iterator = DataLoader(train_dataset,
-                                    sampler=train_sampler,
-                                    batch_size=args.train_batch_size,
-                                    num_workers=0)
-        step_loss = 0.0
-        trained_set += 1
-        tqdm_desc = f'[TRAIN]Epoch {cur_epoch}/{args.epochs}; Sub-dataset {trained_set}/{num_of_sets}'
-        tqdm_bar = tqdm(enumerate(train_iterator), total=len(train_iterator), desc=tqdm_desc)
-        for idx, batch in tqdm_bar:
-            outputs = model(**batch)
-            # backward pass
-            torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
-            optim.zero_grad()
-            outputs.loss.backward()
-            optim.step()
-            tr_loss += outputs.loss.detach().item()
-            step_loss += outputs.loss.detach().item()
-            nb_tr_steps += 1
-            # Save checkpoint to backup model
-            if nb_tr_steps % args.save_step == 0:
-                saved_file = Path(args.output_dir + f"/backup_model.pt")
-                LOGGER.info(f"\t***Opps!!! Over save step, saving to {saved_file}...***")
-                save_model(args, saved_file, model)
-        if tb_writer is not None:
-            tb_writer.add_scalar(f'TRAIN_STEP/{fname}', step_loss, cur_epoch)
+    train_sampler = RandomSampler(train_dataset)
+    train_iterator = DataLoader(train_dataset,
+                                sampler=train_sampler,
+                                batch_size=args.train_batch_size,
+                                num_workers=0)
+    step_loss = 0.0
+    trained_set += 1
+    tqdm_desc = f'[TRAIN]Epoch {cur_epoch}/{args.epochs};'
+    tqdm_bar = tqdm(enumerate(train_iterator), total=len(train_iterator), desc=tqdm_desc)
+    for idx, batch in tqdm_bar:
+        outputs = model(**batch)
+        # backward pass
+        torch.nn.utils.clip_grad_norm_(parameters=model.parameters(), max_norm=max_grad_norm)
+        optim.zero_grad()
+        outputs.loss.backward()
+        optim.step()
+        tr_loss += outputs.loss.detach().item()
+        step_loss += outputs.loss.detach().item()
+        nb_tr_steps += 1
+        # Save checkpoint to backup model
+        if nb_tr_steps % args.save_step == 0:
+            saved_file = Path(args.output_dir + f"/backup_model.pt")
+            LOGGER.info(f"\t***Opps!!! Over save step, saving to {saved_file}...***")
+            save_model(args, saved_file, model)
     epoch_loss = tr_loss / nb_tr_steps
     LOGGER.info(f"\t{'*' * 20}Train Summary{'*' * 20}")
     LOGGER.info(
@@ -283,6 +259,10 @@ def train():
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate, eps=args.adam_epsilon)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'max', patience=args.scheduler_patience)
 
+    # Load Dataset
+    train_fname, train_dataset = get_datasets(args=args, tokenizer=tokenizer, dtype='train', use_crf=use_crf, device=device)
+    eval_fname, valid_dataset = get_datasets(args=args, tokenizer=tokenizer, dtype='test', use_crf=use_crf, device=device)
+
     # Trainer Summary
     total_params, trainable_param = get_total_model_parameters(model)
     LOGGER.info(f"{'=' * 20}TRAINER SUMMARY{'=' * 20}")
@@ -317,24 +297,18 @@ def train():
         LOGGER.info(f"\n{'=' * 30}Training epoch {epoch}{'=' * 30}")
         # Fit model with dataset
         train_loss = train_one_epoch(args,
+                                     train_dataset,
                                      cur_epoch=epoch,
                                      model=model,
                                      optim=optimizer,
-                                     tokenizer=tokenizer,
-                                     max_grad_norm=args.max_grad_norm,
-                                     device=device,
-                                     use_crf=use_crf,
-                                     tb_writer=tensorboard_writer)
+                                     max_grad_norm=args.max_grad_norm)
         tensorboard_writer.add_scalar('TRAIN_RESULT/Loss', train_loss, epoch)
         gc.collect()
         # Eval
         eval_loss, eval_acc, eval_f1 = validate(args,
+                                                valid_dataset=valid_dataset,
                                                 cur_epoch=epoch,
-                                                model=model,
-                                                tokenizer=tokenizer,
-                                                device=device,
-                                                use_crf=use_crf,
-                                                tb_writer=tensorboard_writer)
+                                                model=model)
         if scheduler is not None:
             scheduler.step(eval_f1)
         tensorboard_writer.add_scalar('EVAL_RESULT/Loss', eval_loss, epoch)
