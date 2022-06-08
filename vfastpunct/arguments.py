@@ -48,6 +48,8 @@ def get_test_argument():
     parser = ArgumentParser()
     parser.add_argument('type', choices=['train', 'test', 'download'],
                         help='What processs to be run')
+    parser.add_argument('--dataset_type', choices=['news', 'novels', 'custom'], nargs='?', const='custom', default='custom',
+                        help='What dataset to be test')
     parser.add_argument("--data_dir", default='datasets/News', type=str,
                         help="The input data dir. Should contain the .txt files (or other data files) for the task.")
     parser.add_argument("--model_path", default='outputs/best_model.pt', type=str,

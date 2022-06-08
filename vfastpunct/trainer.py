@@ -1,7 +1,7 @@
 from vfastpunct.arguments import get_train_argument, get_test_argument, get_download_argument
-from vfastpunct.constants import LOGGER, MODEL_MAPPING, PUNCT_LABEL2ID, CAP_LABEL2ID
+from vfastpunct.constants import LOGGER, MODEL_MAPPING, PUNCT_LABEL2ID, CAP_LABEL2ID, PUBLIC_PUNCT_LABEL2ID
 from vfastpunct.datasets import build_and_cached_dataset
-from vfastpunct.ultis import get_total_model_parameters, download_dataset_from_drive
+from vfastpunct.ultis import get_total_model_parameters, download_dataset_from_drive, set_ramdom_seed, map_labels
 
 from typing import Generator
 from tqdm import tqdm
@@ -19,18 +19,11 @@ import sys
 import time
 import torch
 import random
-import numpy as np
 import itertools
 
 
-def set_ramdom_seed(seed: int):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
-
 def get_datasets(args, tokenizer, dtype: str = 'train',  use_crf: bool = False, device: str = 'cpu') -> Generator:
-    data_files = glob.glob(str(Path(args.data_dir + f'/{dtype}_*_splitted.txt')))
+    data_files = glob.glob(str(Path(args.data_dir + f'/{dtype}*_splitted.txt')))
     random.shuffle(data_files)
     LOGGER.info(f"Found {len(data_files)} to {dtype.upper()} in {args.data_dir}")
     count = 0
@@ -75,7 +68,7 @@ def validate(args,
     for num_of_sets, fname, valid_dataset in get_datasets(args, tokenizer, 'test', use_crf=use_crf, device=device):
         step_loss, step_ploss, step_closs = 0.0, 0.0, 0.0
         evaled_sets += 1
-        valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=True, num_workers=0)
+        valid_iterator = DataLoader(valid_dataset, batch_size=args.eval_batch_size, shuffle=False, num_workers=0)
         # Run one step on sub-dataset
         with torch.no_grad():
             tqdm_desc = f'[EVAL]Epoch {cur_epoch}/{args.epochs}; Sub-dataset{evaled_sets}/{num_of_sets}'
@@ -116,12 +109,17 @@ def validate(args,
     epoch_ploss = eval_ploss / nb_eval_steps
     epoch_closs = eval_closs / nb_eval_steps
     if is_test:
-        preports = classification_report(eval_plabels, eval_ppreds, zero_division=0)
+        punct_label2id = PUNCT_LABEL2ID
+        if not args.dataset_type == 'custom':
+            punct_label2id = PUBLIC_PUNCT_LABEL2ID
+            eval_plabels = map_labels(eval_plabels, PUNCT_LABEL2ID, PUBLIC_PUNCT_LABEL2ID)
+            eval_ppreds = map_labels(eval_ppreds, PUNCT_LABEL2ID, PUBLIC_PUNCT_LABEL2ID)
+        preports = classification_report(eval_plabels, eval_ppreds, zero_division=0, target_names=punct_label2id)
         LOGGER.info(f'\tTest Loss: {eval_loss}; Spend time: {time.time() - start_time}')
         LOGGER.info('Punct Report:')
         LOGGER.info(preports)
         if len(eval_cpreds) > 0:
-            creports = classification_report(eval_clabels, eval_cpreds, zero_division=0)
+            creports = classification_report(eval_clabels, eval_cpreds, zero_division=0, target_names=CAP_LABEL2ID)
             LOGGER.info('Cap Report:')
             LOGGER.info(creports)
         return epoch_loss
@@ -211,6 +209,7 @@ def test():
     model = model_archs['model_clss'](config=config)
     model.resize_token_embeddings(len(tokenizer))
     model.to(device)
+    LOGGER.info("Load model trained weights")
     model.load_state_dict(checkpoint_data['model'])
     del checkpoint_data
     gc.collect()
@@ -222,6 +221,7 @@ def test():
                             ['Model architecture', configs.model_arch],
                             ['Encoder name', configs.model_name_or_path],
                             ['Model path', args.model_path],
+                            ['Data dir', args.data_dir],
                             ['Total params', total_params],
                             ['Max sequence length', configs.max_seq_length],
                             ['Test batch size', args.batch_size],
@@ -230,10 +230,13 @@ def test():
                             ['Cached dataset', args.cached_dataset],
                             ['Ovewrite dataset', args.overwrite_data]])
     LOGGER.info(summary_table)
+    configs.data_dir = args.data_dir
     configs.eval_batch_size = args.batch_size
     configs.num_worker = args.num_worker
     configs.no_cuda = args.no_cuda
     configs.cached_dataset = args.cached_dataset
+    configs.task = 'punct' if args.dataset_type in ['news', 'novels'] else configs.task
+    setattr(configs, 'dataset_type', args.dataset_type)
     use_crf = True if 'crf' in configs.model_arch else False
     validate(configs, model=model, tokenizer=tokenizer, device=device, use_crf=use_crf, is_test=True)
 

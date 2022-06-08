@@ -75,13 +75,14 @@ class PunctCapBiLstm(PunctCapBiLstmBase):
         label_masks = label_masks.view(-1) != 0
         seq_ptags = torch.masked_select(torch.argmax(F.log_softmax(p_logits, dim=2), dim=2).view(-1), label_masks).tolist()
         seq_ctags = torch.masked_select(torch.argmax(F.log_softmax(c_logits, dim=2), dim=2).view(-1), label_masks).tolist()
-        if plabels is not None:
+        if plabels is not None and clabels is not None:
             p_loss = self.loss_func(p_logits.view(-1, self.num_plabels), plabels.view(-1))
             c_loss = self.loss_func(c_logits.view(-1, self.num_clabels), clabels.view(-1))
             loss = p_loss + c_loss
             return BaseModelOutput(loss=loss, ploss=p_loss, closs=c_loss, ptags=seq_ptags, ctags=seq_ctags)
         else:
             return BaseModelOutput(ptags=seq_ptags, ctags=seq_ctags)
+
 
 class PunctCapBiLstmCrf(PunctCapBiLstmBase):
     def __init__(self, config):

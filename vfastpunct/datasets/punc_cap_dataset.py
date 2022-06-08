@@ -65,6 +65,8 @@ class PunctCapDataset(BaseDataset):
         sentence = example.example
         plabels = [PUNCT_LABEL2ID.index(l) for l in example.plabels.split()]
         clabels = [CAP_LABEL2ID.index(l) for l in example.clabels.split()]
+        if len(clabels) == 0:
+            clabels = [0] * len(plabels)
         ex_len = len(plabels)
         label_masks = [1] * ex_len
         encoding = self.tokenizer(normalize_text(sentence),

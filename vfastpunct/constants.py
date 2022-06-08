@@ -13,6 +13,9 @@ PUNCT_ID2LABEL = {idx: label for idx, label in enumerate(PUNCT_LABEL2ID)}
 CAP_LABEL2ID = ['O', 'U', 'T']
 CAP_ID2LABEL = {idx: label for idx, label in enumerate(CAP_LABEL2ID)}
 
+PUBLIC_PUNCT_LABEL2ID = ['O', 'PERIOD', 'COMMA', 'COLON', 'QMARK', 'EXCLAM', 'SEMICOLON']
+PUBLIC_PUNCT_ID2LABEL = {idx: label for idx, label in enumerate(PUBLIC_PUNCT_LABEL2ID)}
+
 PUNCT_PATTERN = re.compile(f'[{punctuation}]+')
 
 PUNCT_MAPPING = {
