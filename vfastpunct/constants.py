@@ -8,6 +8,7 @@ import re
 
 LOGGER = init_logger(datetime.now().strftime('%d%b%Y_%H-%M-%S.log'))
 EOS_MARKS = ["PERIOD", "QMARK", "EXCLAM"]
+RATE_MAKS = []
 PUNCT_LABEL2ID = ['O', 'PERIOD', 'COMMA', 'COLON', 'QMARK', 'EXCLAM', 'SEMICOLON', 'HYPHEN', 'ELLIPSIS']
 PUNCT_ID2LABEL = {idx: label for idx, label in enumerate(PUNCT_LABEL2ID)}
 CAP_LABEL2ID = ['O', 'U', 'T']
@@ -17,6 +18,7 @@ PUBLIC_PUNCT_LABEL2ID = ['O', 'PERIOD', 'COMMA', 'COLON', 'QMARK', 'EXCLAM', 'SE
 PUBLIC_PUNCT_ID2LABEL = {idx: label for idx, label in enumerate(PUBLIC_PUNCT_LABEL2ID)}
 
 PUNCT_PATTERN = re.compile(f'[{punctuation}]+')
+CAP_PATTERN = re.compile(f"[A-Z|ÀÁÂÃÈÉÊÌÍÒÓÔÕÙÚĂĐĨŨƠƯĂẠẢẤẦẨẪẬẮẰẲẴẶẸẺẼỀỀỂỄỆỈỊỌỎỐỒỔỖỘỚỜỞỠỢỤỦỨỪỬỮỰỲỴÝỶỸ]").search
 
 PUNCT_MAPPING = {
     'PERIOD': '.',

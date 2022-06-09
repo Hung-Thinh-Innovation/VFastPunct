@@ -28,6 +28,9 @@ def get_build_dataset_argument():
                         help="Maximun number of truncated file.")
     parser.add_argument("--skip_ratio", default=0.0, type=float,
                         help="It should be between 0.0 and 1.0 and represent the proportion of skip examples.")
+    parser.add_argument('--num_worker', type=int, default=0,
+                        help="How many subprocesses to use for data building. 0 means that the data will be loaded in "
+                             "the main process. Only use when small corpus or more RAM")
     return parser.parse_args()
 
 

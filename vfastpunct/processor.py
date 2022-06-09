@@ -1,4 +1,5 @@
-from vfastpunct.constants import LOGGER, PUNCT_PATTERN, STRPUNC_MAPPING, PUNCT_MAPPING, CAP_MAPPING, EOS_MARKS
+from vfastpunct.constants import (LOGGER, PUNCT_PATTERN, CAP_PATTERN,
+                                  STRPUNC_MAPPING, PUNCT_MAPPING, CAP_MAPPING, EOS_MARKS)
 from vfastpunct.arguments import get_build_dataset_argument, get_split_argument
 
 from typing import List, Union
@@ -6,11 +7,14 @@ from tqdm import tqdm
 from pathlib import Path
 from string import punctuation
 from prettytable import PrettyTable
+from tqdm.contrib.concurrent import thread_map
 
 import re
 import os
 import sys
 import glob
+import time
+import json
 import bisect
 import random
 import subprocess
@@ -42,7 +46,10 @@ def split_example(dataframe: pd.DataFrame, eos_marks: List[str], max_len: int = 
 
 def split_example_from_file(dpath: Union[str or os.PathLike], eos_marks: List[str], max_len: int = 128):
     idx = 0
-    dataframe = pd.read_csv(dpath, encoding='utf-8', sep=' ', names=['token', 'plabel', 'clabel'], keep_default_na=False)
+    dataframe = pd.read_csv(dpath, encoding='utf-8',
+                            sep=' ',
+                            names=['token', 'plabel', 'clabel'],
+                            keep_default_na=False)
     num_token = len(dataframe)
     examples = []
     while num_token > idx >= 0:
@@ -85,6 +92,8 @@ def get_cap_label(token: str) -> str:
         return 'U'
     elif token.istitle():
         return 'T'
+    elif CAP_PATTERN(token):
+        return 'S'
     else:
         return 'O'
 
@@ -97,72 +106,140 @@ def restoration_punct(examples: List):
     return result.strip()
 
 
-def build_dataset():
+def _convert_plaint_text_to_example(line):
+    examples = ''
+    ptags, ctags = [], []
+    num_token = 0
+    case_dict = {}
+    line = normalize_text(line)
+    if len(line.split()) < 10:
+        return None
+    matches = PUNCT_PATTERN.finditer(line)
+    end_idx = 0
+    for m in matches:
+        tokens = line[end_idx: m.start()].split()
+        if len(tokens) == 0:
+            end_idx = m.end()
+            continue
+        for t in tokens[:-1]:
+            c_tag = get_cap_label(t)
+            if c_tag == 'S':
+                c_tag = 'T'
+                case_dict[t.lower()] = t
+            ptags.append('O')
+            ctags.append(c_tag)
+            examples += ' '.join([t.lower(), 'O', c_tag]) + '\n'
+        puncts = line[m.start(): m.end()]
+        punc_label = 'O'
+        if puncts in STRPUNC_MAPPING:
+            punc_label = STRPUNC_MAPPING[puncts]
+        elif '...' in puncts and '...' in STRPUNC_MAPPING:
+            punc_label = STRPUNC_MAPPING['...']
+        else:
+            for punc in list(puncts):
+                if punc in STRPUNC_MAPPING:
+                    punc_label = STRPUNC_MAPPING[punc]
+                    break
+        c_tag = get_cap_label(tokens[-1])
+        if c_tag == 'S':
+            c_tag = 'T'
+            case_dict[tokens[-1].lower()] = tokens[-1]
+        ptags.append(punc_label)
+        ctags.append(c_tag)
+        examples += ' '.join([tokens[-1].lower(), punc_label, c_tag]) + '\n'
+        end_idx = m.end()
+        num_token += len(tokens)
+    return examples, ptags, ctags, num_token, case_dict
+
+
+def _single_thread_build(raw_path, workers=0):
+    total_lines = get_total_lines(raw_path)
+    with open(raw_path, 'r', encoding='utf-8') as f:
+        for idx, line in enumerate(tqdm(f, total=total_lines)):
+            yield _convert_plaint_text_to_example(line)
+
+
+def _multi_thread_build(raw_path, workers=2):
+    with open(raw_path, 'r', encoding='utf-8') as f:
+        lines = f.readlines()
+        for outputs in thread_map(_convert_plaint_text_to_example, lines ,
+                               max_workers=workers,
+                               desc="Build dataset",
+                               leave=False,
+                               colour='blue'):
+            yield outputs
+
+
+def build_dataset_from_plain_text():
     args = get_build_dataset_argument()
     LOGGER.info(f"{'=' * 20}BUILD SUMMARY{'=' * 20}")
+    summary_dict = {
+        "config": vars(args),
+        "stats": {
+            "num_words": 0,
+            "total_ptags": 0,
+            "num_ptags": {tag: 0 for tag in PUNCT_MAPPING.keys()},
+            "total_ctags": 0,
+            "num_ctags":  {tag: 0 for tag in CAP_MAPPING.keys()}
+        }
+    }
+    transform_case_dict = {}
     summary_table = PrettyTable(["Arguments", "Values"])
-    summary_table.add_rows([['Corpus', args.corpus_path],
-                            ['Split test', args.split_test],
-                            ['Test ratio', args.test_ratio],
-                            ['Truncate', args.truncate],
-                            ['Truncate size', args.truncate_size],
-                            ['Skip ratio', args.skip_ratio]])
+    summary_table.add_rows([[k, v] for k, v in summary_dict['config'].items()])
     LOGGER.info(summary_table)
     raw_path = Path(args.corpus_path)
     train_trunc_id, test_trunc_id = 0, 0
     train_count, test_count = 0, 0
-    total_lines = get_total_lines(raw_path)
     train_writer = open(Path(str(raw_path.parent) + f'/train_{train_trunc_id:03}.txt'), 'w')
     test_writer = open(Path(str(raw_path.parent) + f'/test_{test_trunc_id:03}.txt'), 'w') if args.split_test else None
-    with open(raw_path, 'r', encoding='utf-8') as f:
-        for idx, line in enumerate(tqdm(f, total=total_lines)):
-            if random.uniform(0, 1) < args.skip_ratio:
+    process_func =  _multi_thread_build if args.num_worker > 0 else _single_thread_build
+    start_time = time.time()
+    for examples in process_func(raw_path, workers=args.num_worker):
+        if examples is None:
+            continue
+        cur_samples, cur_ptags, cur_ctags, num_token, case_dict = examples
+        for k, v in case_dict.items():
+            transform_case_dict[k] = v
+        # Skip dataset with ratio
+        if random.uniform(0, 1) < args.skip_ratio:
+            rare_ptags = sorted(summary_dict['stats']['num_ptags'],
+                                key=summary_dict['stats']['num_ptags'].get,
+                                reverse=False)[:3]
+            if len(set(cur_ptags) & set(rare_ptags)) == 0:
                 continue
-            cur_examples = ''
-            cur_count = 0
-            line = normalize_text(line)
-            if len(line.split()) < 10:
-                continue
-            if len(PUNCT_PATTERN.findall(line)) < 2 and random.uniform(0, 1) < 0.5:
-                continue
-            matches = PUNCT_PATTERN.finditer(line)
-            end_idx = 0
-            for m in matches:
-                tokens = line[end_idx: m.start()].split()
-                if len(tokens) == 0:
-                    end_idx = m.end()
-                    continue
-                for t in tokens[:-1]:
-                    cur_examples += ' '.join([t.lower(), 'O', get_cap_label(t)]) + '\n'
-                puncs = line[m.start(): m.end()]
-                punc_label = 'O'
-                if puncs in STRPUNC_MAPPING:
-                    punc_label = STRPUNC_MAPPING[puncs]
-                else:
-                    for punc in list(puncs):
-                        if punc in STRPUNC_MAPPING:
-                            punc_label = STRPUNC_MAPPING[punc]
-                            break
-                cur_examples += ' '.join([tokens[-1].lower(), punc_label, get_cap_label(tokens[-1])]) + '\n'
-                end_idx = m.end()
-                cur_count += len(tokens)
-            if random.uniform(0, 1) > args.test_ratio or not args.split_test:
-                train_count += cur_count
-                train_writer.write(cur_examples)
-                if args.truncate and train_count >= args.truncate_size:
-                    train_count = 0
-                    train_trunc_id += 1
-                    train_writer.close()
-                    train_writer = open(Path(str(raw_path.parent) + f'/train_{train_trunc_id:03}.txt'), 'w')
-            else:
-                test_count += cur_count
-                test_writer.write(cur_examples)
-                test_count += 1
-                if args.truncate and test_count >= args.truncate_size:
-                    test_count = 0
-                    test_trunc_id += 1
-                    test_writer.close()
-                    test_writer = open(Path(str(raw_path.parent) + f'/train_{test_trunc_id:03}.txt'), 'w')
+
+        summary_dict['stats']['num_words'] += num_token
+        summary_dict['stats']['total_ptags'] += (num_token - cur_ptags.count("O"))
+        for p_tag in cur_ptags: summary_dict['stats']['num_ptags'][p_tag] += 1
+        summary_dict['stats']['total_ctags'] += (num_token - cur_ctags.count("O"))
+        for c_tag in cur_ctags: summary_dict['stats']['num_ctags'][c_tag] += 1
+
+        # Train-Test split
+        if random.uniform(0, 1) > args.test_ratio or not args.split_test:
+            train_count += num_token
+            train_writer.write(cur_samples)
+            if args.truncate and train_count >= args.truncate_size:
+                train_count = 0
+                train_trunc_id += 1
+                train_writer.close()
+                train_writer = open(Path(str(raw_path.parent) + f'/train_{train_trunc_id:03}.txt'), 'w')
+        else:
+            test_count += num_token
+            test_writer.write(cur_samples)
+            test_count += 1
+            if args.truncate and test_count >= args.truncate_size:
+                test_count = 0
+                test_trunc_id += 1
+                test_writer.close()
+                test_writer = open(Path(str(raw_path.parent) + f'/train_{test_trunc_id:03}.txt'), 'w')
+    spend_time = time.time() - start_time
+    with open(os.path.join(raw_path.parent, "dataset_summary.json"), "w") as outfile:
+        LOGGER.info(f"Save summary to `{raw_path.parent}/dataset_summary.json`")
+        json.dump(summary_dict, outfile)
+    with open(os.path.join(raw_path.parent, "special_case_dict.json"), "w") as outfile:
+        LOGGER.info(f"Save transform case dict to `{raw_path.parent}/special_case_dict.json`")
+        json.dump(transform_case_dict, outfile)
+    LOGGER.info(f"Build process cost: {spend_time}")
     train_writer.close()
     test_writer.close()
 
@@ -208,7 +285,7 @@ def split_examples():
 if __name__ == "__main__":
     if sys.argv[1] == 'build':
         LOGGER.info("Start BUILD dataset process... go go go!!!")
-        build_dataset()
+        build_dataset_from_plain_text()
     elif sys.argv[1] == 'split':
         LOGGER.info("Start SPLIT dataset process... go go go!!!")
         split_examples()
