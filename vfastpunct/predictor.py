@@ -1,6 +1,6 @@
 from vfastpunct.constants import BASE_PATH, MODEL_MAPPING, PUNCT_MAPPING, CAP_MAPPING, PUNC_LABEL2ID
 from vfastpunct.processor import normalize_text
-from vfastpunct.ultis import download_file_from_google_drive
+from vfastpunct.ultis import md5, download_file_from_google_drive
 
 from typing import List, Union, Tuple
 from transformers import AutoConfig, AutoTokenizer
@@ -19,15 +19,18 @@ class VFastPunct(object):
         self.stride = chunk_size - overlap_size
         params = MODEL_MAPPING[model_name]
         model_path = os.path.join(BASE_PATH, f'{model_name.lower()}_{params["drive_id"]}.pt')
-        if not os.path.exists(model_path):
+        if not os.path.exists(model_path) or md5(model_path) != params['md5']:
             download_file_from_google_drive(params["drive_id"], model_path, confirm='t')
+        print("[VFastPunct] Model loading ...")
         self.model, self.tokenizer, self.max_seq_len, self.punc2id, self.cap2id, self.use_crf, \
             = self.load_model(model_path=model_path, device=self.device, **params)
         self.id2puc = {idx: label for idx, label in enumerate(self.punc2id)}
         self.id2cap = {idx: label for idx, label in enumerate(self.cap2id)}
+        print("[VFastPunct] All ready go go go!")
 
     @staticmethod
     def load_model(model_clss, config_clss, encode_name, model_path, device='cpu', **kwargs):
+
         if device == 'cpu':
             checkpoint_data = torch.load(model_path, map_location='cpu')
         else:
@@ -121,9 +124,9 @@ class VFastPunct(object):
 if __name__ == "__main__":
     from string import punctuation
     import re
-    punct = VFastPunct("mLstmPuncCap", True)
+    punct = VFastPunct("mLstmPunctCap", False)
     while True:
-        in_raw = input()
+        in_raw = input('>>')
         # in_raw = 'việt nam quốc hiệu chính thức là cộng hòa xã hội chủ nghĩa việt nam là một quốc gia nằm ở cực đông của ' \
         #          'bán đảo đông dương thuộc khu vực đông nam á giáp với lào campuchia trung quốc biển đông và vịnh thái ' \
         #          'lan'.lower()

@@ -36,19 +36,22 @@ MODEL_MAPPING = {
         'model_clss': PuncBertLstmCrf,
         'config_clss': PuncCapBertConfig,
         'encode_name': 'bert-base-multilingual-cased',
-        'drive_id': '17Ru3-tA98jcuV64rchf_zpfUj2K-TuZg'
+        'drive_id': '17Ru3-tA98jcuV64rchf_zpfUj2K-TuZg',
+        'md5': '24f9324f211ed6bcc0c16b024023c142',
     },
-    'mBertPuncCap': {
+    'mBertPunctCap': {
         'model_clss': PuncCapBertLstmCrf,
         'config_clss': PuncCapBertConfig,
         'encode_name': 'bert-base-multilingual-cased',
-        'drive_id': '1Iv3iQfuA7NWRa2lQgWVn4fMLk4-XkWwZ'
+        'drive_id': '1Iv3iQfuA7NWRa2lQgWVn4fMLk4-XkWwZ',
+        'md5': '958d822986892596b846f4e9b7316a64',
     },
-    'mLstmPuncCap': {
+    'mLstmPunctCap': {
         'model_clss': PunctCapBiLstm,
         'config_clss': PunctCapLstmConfig,
         'encode_name': 'bert-base-multilingual-cased',
-        'drive_id': '11tsglNoAJzpCwAkWXs8OGIo2WJCqPw59'
+        'drive_id': '11tsglNoAJzpCwAkWXs8OGIo2WJCqPw59',
+        'md5': 'cc3348c89d6d735484e14f71ccdf459a',
     },
 }
 

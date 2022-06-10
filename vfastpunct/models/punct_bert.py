@@ -12,13 +12,14 @@ logging.set_verbosity_error()
 class PuncBertLstmCrf(BertForTokenClassification):
     def __init__(self, config):
         super(PuncBertLstmCrf, self).__init__(config=config)
-        self.num_labels = config.num_labels
+        self.num_labels = config.num_plabels
         self.lstm = nn.LSTM(input_size=config.hidden_size,
                             hidden_size=config.hidden_size // 2,
                             num_layers=2,
                             batch_first=True,
                             bidirectional=True)
-        self.crf = CRF(config.num_labels, batch_first=True)
+        self.classifier = nn.Linear(config.hidden_size, self.num_labels)
+        self.crf = CRF(config.num_plabels, batch_first=True)
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, valid_ids=None,
                 label_masks=None) -> BaseModelOutput:

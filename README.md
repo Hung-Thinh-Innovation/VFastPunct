@@ -13,11 +13,11 @@ pip install VFastPunct
 ## Run
 ```python
 >>> from vfastpunct import VFastPunct
->>> punct = VFastPunct(model_name='mBertPuncCap', no_cuda=False)
+>>> punct = VFastPunct(model_name='mBertPunctCap', no_cuda=False)
 >>> punct('việt nam quốc hiệu chính thức là cộng hòa xã hội chủ nghĩa việt nam là một quốc gia nằm ở cực đông của bán đảo đông dương thuộc khu vực đông nam á giáp với lào campuchia trung quốc biển đông và vịnh thái lan')
 'Việt Nam quốc hiệu chính thức là Cộng hòa Xã hội chủ nghĩa Việt Nam, là một quốc gia nằm ở cực Đông của bán đảo Đông Dương, thuộc khu vực Đông Nam Á, giáp với Lào, Campuchia, Trung Quốc, Biển Đông và Vịnh Thái Lan.'
 ```
 >Arguments:
 > 
-> + *model_name*: The name of the architectural model that was utilized to restore punctuation and capitalization. Valid model name can be [*`mBertPunct`*, *`mBertPuncCap`*]
+> + *model_name*: The name of the architectural model that was utilized to restore punctuation and capitalization. Valid model name can be [*`mBertPunct`*, *`mBertPunctCap`*]
 > + *no_cuda*:  Whether to not use CUDA even when it is available or not.
