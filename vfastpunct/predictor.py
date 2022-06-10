@@ -1,7 +1,8 @@
-from vfastpunct.constants import BASE_PATH, MODEL_MAPPING, PUNC_MAPPING, CAP_MAPPING, PUNC_LABEL2ID
+from vfastpunct.constants import BASE_PATH, MODEL_MAPPING, PUNCT_MAPPING, CAP_MAPPING, PUNC_LABEL2ID
 from vfastpunct.processor import normalize_text
 from vfastpunct.ultis import download_file_from_google_drive
 
+from typing import List, Union, Tuple
 from transformers import AutoConfig, AutoTokenizer
 
 import os
@@ -11,12 +12,16 @@ import numpy as np
 
 
 class VFastPunct(object):
-    def __init__(self, model_name, no_cuda=False):
+    def __init__(self, model_name, no_cuda=False, chunk_size=96, overlap_size=24):
         self.device = 'cuda' if not no_cuda and torch.cuda.is_available() else 'cpu'
+        self.chunk_size = chunk_size
+        self.overlap_size = overlap_size
+        self.stride = chunk_size - overlap_size
         params = MODEL_MAPPING[model_name]
         model_path = os.path.join(BASE_PATH, f'{model_name.lower()}_{params["drive_id"]}.pt')
         if not os.path.exists(model_path):
             download_file_from_google_drive(params["drive_id"], model_path, confirm='t')
+        model_path = './best_model.pt'
         self.model, self.tokenizer, self.max_seq_len, self.punc2id, self.cap2id = self.load_model(model_path=model_path,
                                                                                      device=self.device,
                                                                                      **params)
@@ -50,12 +55,12 @@ class VFastPunct(object):
                                   truncation=True,
                                   return_offsets_mapping=True,
                                   max_length=self.max_seq_len)
-        valid_id = np.zeros(len(encoding["offset_mapping"]), dtype=int)
+        valid_id = np.ones(len(encoding["offset_mapping"]), dtype=int)
         i = 0
         for idx, mapping in enumerate(encoding["offset_mapping"]):
             if mapping == (0, 0) or (mapping[0] != 0 and mapping[0] == encoding["offset_mapping"][idx - 1][-1]):
+                valid_id[idx] = 0
                 continue
-            valid_id[idx] = 1
             i += 1
         label_masks = [1] * i
         label_masks.extend([0] * (self.max_seq_len - len(label_masks)))
@@ -69,49 +74,59 @@ class VFastPunct(object):
         norm_text = normalize_text(in_raw)
         sents = []
         tokens = norm_text.split()
-        idx = 0
         num_token = len(tokens)
-        while num_token > idx >= 0:
-            sents.append(' '.join(tokens[idx: min(idx + self.max_seq_len, num_token)]))
-            idx += self.max_seq_len + 1
+        if num_token <= self.chunk_size:
+            sents.append(norm_text)
+            return sents
+        idx = 0
+        while num_token - self.overlap_size > idx and len(tokens[idx:]) > 0:
+            sents.append(' '.join(tokens[idx: idx + self.chunk_size]))
+            idx += self.stride
         return sents
 
-    def _postprocess(self, sent, tags):
-        result = ''
+    def _postprocess(self,  sent: List[str], next_sent: str, tags: Union[List, Tuple]):
+        next_words = next_sent.split()
+        keep_size = 0
+        if len(sent) > 0:
+            keep_size = min(self.overlap_size // 2, len(next_sent) // 2)
+            sent = sent[:-keep_size]
         if isinstance(tags, tuple):
             ptags, ctags = tags
-            for w, ptag, ctag in list(zip(sent.split(), list(itertools.chain(*ptags)), list(itertools.chain(*ctags)))):
-                p = PUNC_MAPPING[self.id2puc[ptag]]
+            for w, ptag, ctag in list(zip(next_words[keep_size:], ptags[keep_size:], ctags[keep_size:])):
+                p = PUNCT_MAPPING[self.id2puc[ptag]]
                 c = self.id2cap[ctag]
-                if len(result) > 0 and result[-1] == ".":
-                    result += f" {w.title()}{p}"
+                if len(sent) > 0 and sent[-1][-1] == "." and c != 'U':
+                    sent.append(f"{w.title()}{p}")
                 else:
-                    result += f" {CAP_MAPPING[c](w)}{p}"
-            return result
-        for w, l in list(zip(sent.split(), list(itertools.chain(*tags)))):
-            p = PUNC_MAPPING[self.id2puc[l]]
-            if len(result) > 0 and result[-1] == ".":
-                result += f" {w.title()}{p}"
+                    sent.append(f"{CAP_MAPPING[c](w)}{p}")
+            return sent
+        for w, l in list(zip(next_words[keep_size:], list(itertools.chain(*tags))[keep_size:])):
+            p = PUNCT_MAPPING[self.id2puc[l]]
+            if len(sent) > 0 and sent[-1] == ".":
+                sent.append(f"{w.title()}{p}")
             else:
-                result += f" {w}{p}"
+                sent.append(f"{w}{p}")
+        return sent
 
     def __call__(self, in_raw: str):
         sents = self._preprocess(in_raw)
-        result = ''
-        for sent in sents:
-            item = self._convert_tensor(sent)
+        result = []
+        for next_sent in sents:
+            item = self._convert_tensor(next_sent)
             with torch.no_grad():
-                tags = self.model(**item)
-            result += self._postprocess(sent, tags)
-        return result.strip()
+                outputs = self.model(**item)
+            result = self._postprocess(result, next_sent, (outputs.ptags, outputs.ctags))
+        return ' '.join(result).strip()
 
 
 if __name__ == "__main__":
     from string import punctuation
     import re
-    punct = VFastPunct("mBertPuncCap", True)
-    in_raw = 'việt nam quốc hiệu chính thức là cộng hòa xã hội chủ nghĩa việt nam là một quốc gia nằm ở cực đông của ' \
-             'bán đảo đông dương thuộc khu vực đông nam á giáp với lào campuchia trung quốc biển đông và vịnh thái ' \
-             'lan'.lower()
-    in_text = re.sub(f" +", " ", re.sub(f"[{punctuation}]", " ", in_raw))
-    print(punct(in_text))
+    punct = VFastPunct("mLstmPuncCap", True)
+    while True:
+        in_raw = input()
+        # in_raw = 'việt nam quốc hiệu chính thức là cộng hòa xã hội chủ nghĩa việt nam là một quốc gia nằm ở cực đông của ' \
+        #          'bán đảo đông dương thuộc khu vực đông nam á giáp với lào campuchia trung quốc biển đông và vịnh thái ' \
+        #          'lan'.lower()
+        in_text = re.sub(f" +", " ", re.sub(f"[{punctuation}]", " ", in_raw).lower())
+        print(punct(in_text))

@@ -1,7 +1,5 @@
 from vfastpunct.log import init_logger
-from vfastpunct.models import PuncBertLstmCrf, PuncCapBertLstmCrf, PuncCapBertConfig
-
-from transformers import BertConfig
+from vfastpunct.models import PuncBertLstmCrf, PuncCapBertLstmCrf, PuncCapBertConfig, PunctCapBiLstm, PunctCapLstmConfig
 
 
 LOGGER = init_logger()
@@ -13,7 +11,7 @@ PUNC_ID2LABEL = {idx: label for idx, label in enumerate(PUNC_LABEL2ID)}
 CAP_ID2LABEL = {idx: label for idx, label in enumerate(CAP_LABEL2ID)}
 
 
-PUNC_MAPPING = {
+PUNCT_MAPPING = {
     'PERIOD': '.',
     'COMMA': ',',
     'COLON': ':',
@@ -45,6 +43,12 @@ MODEL_MAPPING = {
         'config_clss': PuncCapBertConfig,
         'encode_name': 'bert-base-multilingual-cased',
         'drive_id': '1Iv3iQfuA7NWRa2lQgWVn4fMLk4-XkWwZ'
+    },
+    'mLstmPuncCap': {
+        'model_clss': PunctCapBiLstm,
+        'config_clss': PunctCapLstmConfig,
+        'encode_name': 'bert-base-multilingual-cased',
+        'drive_id': '11tsglNoAJzpCwAkWXs8OGIo2WJCqPw59'
     },
 }
 
