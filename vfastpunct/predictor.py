@@ -21,10 +21,8 @@ class VFastPunct(object):
         model_path = os.path.join(BASE_PATH, f'{model_name.lower()}_{params["drive_id"]}.pt')
         if not os.path.exists(model_path):
             download_file_from_google_drive(params["drive_id"], model_path, confirm='t')
-        model_path = './best_model.pt'
-        self.model, self.tokenizer, self.max_seq_len, self.punc2id, self.cap2id = self.load_model(model_path=model_path,
-                                                                                     device=self.device,
-                                                                                     **params)
+        self.model, self.tokenizer, self.max_seq_len, self.punc2id, self.cap2id, self.use_crf, \
+            = self.load_model(model_path=model_path, device=self.device, **params)
         self.id2puc = {idx: label for idx, label in enumerate(self.punc2id)}
         self.id2cap = {idx: label for idx, label in enumerate(self.cap2id)}
 
@@ -39,6 +37,7 @@ class VFastPunct(object):
         if 'pclasses' not in checkpoint_data and 'classes' in checkpoint_data:
             pclasses = checkpoint_data['classes']
         max_seq_len = checkpoint_data['args'].max_seq_length
+        use_crf = 'crf' in checkpoint_data['args'].model_arch
         tokenizer = AutoTokenizer.from_pretrained(encode_name)
         config = config_clss.from_pretrained(encode_name,
                                              num_plabels=len(checkpoint_data.get('pclasses', pclasses)),
@@ -47,7 +46,7 @@ class VFastPunct(object):
         model.load_state_dict(checkpoint_data['model'])
         model.to(device)
         model.eval()
-        return model, tokenizer, max_seq_len, pclasses, cclasses
+        return model, tokenizer, max_seq_len, pclasses, cclasses, use_crf
 
     def _convert_tensor(self, sent):
         encoding = self.tokenizer(normalize_text(sent),
@@ -67,7 +66,7 @@ class VFastPunct(object):
         encoding.pop('offset_mapping', None)
         item = {key: torch.as_tensor([val]).to(self.device, dtype=torch.long) for key, val in encoding.items()}
         item['valid_ids'] = torch.as_tensor([valid_id]).to(self.device, dtype=torch.long)
-        item['label_masks'] = torch.as_tensor([label_masks]).to(self.device, dtype=torch.long)
+        item['label_masks'] = torch.as_tensor([label_masks if self.use_crf else valid_id]).to(self.device, dtype=torch.long)
         return item
 
     def _preprocess(self, in_raw: str):

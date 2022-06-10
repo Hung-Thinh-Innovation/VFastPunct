@@ -60,7 +60,7 @@ class PunctCapBiLstm(PunctCapBiLstmBase):
                 clabels=None,
                 valid_ids=None,
                 label_masks=None):
-        embedding_output =  self.embeddings(
+        embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=None,
             token_type_ids=token_type_ids,

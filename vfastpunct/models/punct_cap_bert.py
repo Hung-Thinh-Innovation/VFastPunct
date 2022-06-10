@@ -6,6 +6,7 @@ from torchcrf import CRF
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import itertools
 
 logging.set_verbosity_error()
 
@@ -92,8 +93,8 @@ class PuncCapBertLstmCrf(BertForTokenClassification):
         p_logits = self.p_classifier(sequence_output)
         c_logits = self.c_classifier(sequence_output)
 
-        seq_ptags = self.p_crf.decode(p_logits, mask=label_masks != 0)
-        seq_ctags = self.c_crf.decode(c_logits, mask=label_masks != 0)
+        seq_ptags = list(itertools.chain(*self.p_crf.decode(p_logits, mask=label_masks != 0)))
+        seq_ctags = list(itertools.chain(*self.c_crf.decode(c_logits, mask=label_masks != 0)))
         if plabels is not None:
             p_log_likelihood = self.p_crf(p_logits, plabels, mask=label_masks.type(torch.uint8) != 0)
             c_log_likelihood = self.c_crf(c_logits, clabels, mask=label_masks.type(torch.uint8))
